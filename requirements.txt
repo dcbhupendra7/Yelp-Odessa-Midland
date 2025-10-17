@@ -1,0 +1,21 @@
+python-dotenv
+requests
+pandas
+numpy
+tqdm
+streamlit
+plotly
+
+# RAG
+faiss-cpu
+sentence-transformers
+
+# OpenAI generator
+openai>=1.40.0
+backoff
+tiktoken
+
+
+
+pydeck
+
