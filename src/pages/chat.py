@@ -260,7 +260,19 @@ df = pd.DataFrame(hits)
 
 # ranking tweaks (best/worst/few reviews)
 if not df.empty:
-    if kind == "best":  
+    # Check if this is a brand-specific query
+    normalized_query = q.lower().replace("'", "").replace(" ", "")
+    brand_queries = [
+        'dominos', 'domino', 'pandaexpress', 'panda', 'starbucks', 'mcdonald', 'mcdonalds', 
+        'kfc', 'pizzahut', 'subway', 'tacobell', 'burgerking', 'wendy', 'wendys',
+        'chickfila', 'chikfila', 'whataburger', 'jackinthebox', 'popeyes', 'littlecaesar',
+        'littlecaesars', 'chipotle', 'fiveguys', 'sonic', 'arby', 'arbys', 'carl',
+        'carlsjr', 'denny', 'dennys', 'ihop', 'wingstop', 'buffalowild', 'olivegarden',
+        'redlobster', 'applebees', 'chili', 'chilis', 'outback', 'texasroadhouse', 'longhorn'
+    ]
+    is_brand_query = any(brand in normalized_query for brand in brand_queries)
+    
+    if kind == "best" and not is_brand_query:
         # For "best", prioritize restaurants with more reviews for reliability
         # Create a reliability score: rating * log(review_count + 1) to balance rating and review count
         df = df.copy()
@@ -298,7 +310,7 @@ if not df.empty:
             
             # Handle price properly - convert nan to N/A
             price_raw = r.get("price")
-            if pd.isna(price_raw) or str(price_raw).lower() == "nan" or str(price_raw).strip() == "":
+            if pd.isna(price_raw) or str(price_raw).lower() in ["nan", "none", ""] or str(price_raw).strip() == "":
                 price = "N/A"
             else:
                 price = str(price_raw)
@@ -339,8 +351,8 @@ if not df.empty:
     </div>
 </div>"""
             out.append(restaurant_card)
-    
-    return "".join(out)
+        
+        return "".join(out)
 
 answer = bullets(df, k)
 
