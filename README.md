@@ -127,3 +127,4 @@ yelp_odessa_sentiment/
 - **Bayesian Weighted Rating**: IMDb-style rating calculation to balance ratings with the number of reviews.
 - **Popularity Scoring**: Logarithmic scaling of review counts to factor in popularity.
 - **Vector Search**: Cosine similarity for semantic search in the RAG system.
+

@@ -1,509 +1,377 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+"""
+chat.py — Streamlit chat with REAL RAG + LLM
+- Tabular retrieval → ranked candidates (best/worst/avg/price/location)
+- FAISS passage retrieval → review snippets for LLM grounding with [1],[2] citations
+- Always responds; never hallucinates business names
+"""
 
-import os
-import re
-import html
-import unicodedata
-from typing import Dict, List, Tuple, Iterable, Set, Optional
-
+import os, re, html, statistics, unicodedata
+from typing import Dict, List, Optional
 import pandas as pd
+import numpy as np
 import streamlit as st
 
-# ---- Your local utils (unchanged contracts) ----
-from utils.rag import Retriever, build_prompt
-from utils.llm_openai import stream_text  # used only when LLM toggle is ON
+# Local utils
+from utils.rag import (
+    Retriever, build_prompt,
+    retrieve_review_passages, build_context_block
+)
+try:
+    from utils.llm_openai import stream_text, complete_text
+except Exception:
+    stream_text = None
+    complete_text = None
 
+# ---------------- Config ----------------
+DEFAULT_MIN_STARS = float(os.getenv("CHAT_MIN_STARS", 0.0))  # Lower default to include all restaurants
+DEFAULT_K = int(os.getenv("CHAT_K", 8))
+USE_LLM = bool(complete_text) and bool(os.getenv("OPENAI_API_KEY"))
 
-# ============================ Page & Styles ============================
+# ---------------- UI ----------------
 st.set_page_config(page_title="RAG Chat — Odessa & Midland", page_icon="💬", layout="wide")
-PAGE_CSS = """
-<style>
-/* Chat bubbles */
-.bubble { padding: 12px 14px; margin: 8px 0; border-radius: 12px; line-height: 1.45; }
-.bubble-user   { background: #1f6feb22; border: 1px solid #1f6feb55; }
-.bubble-assist { background: #30363d;   border: 1px solid #454c54; }
-/* Source chips */
-.source-pill { display:inline-block; margin:6px 6px 0 0; padding:6px 10px;
-               border-radius: 999px; font-size: 12px; background:#2d333b; border:1px solid #444c56; }
-.small-muted { color:#9aa4af; font-size:12px; margin-top:8px; margin-bottom:4px; }
-/* Links */
-.bubble a { text-decoration: none; }
-</style>
-"""
-st.markdown(PAGE_CSS, unsafe_allow_html=True)
+st.markdown("""<style>
+.bubble { padding:12px 14px; margin:8px 0; border-radius:12px; line-height:1.45; width: 100%;}
+.bubble-user{ background:#1f6feb22; border:1px solid #1f6feb55; text-align: right;}
+.bubble-assist{ background:#30363d; border:1px solid #454c54; text-align: left;}
+.small-muted{ color:#9aa4af; font-size:12px; margin:6px 0;}
+.bubble a { text-decoration:none; }
+.chat-container { max-width: 100%; }
+</style>""", unsafe_allow_html=True)
 st.title("💬 RAG Chat — Odessa & Midland")
 
+# Controls Row
+col1, col2 = st.columns([1, 1])
 
-# ============================ Sidebar ============================
-with st.sidebar:
-    st.header("Filters for RAG")
-    USE_LLM = st.toggle("Use LLM (GPT-4o-mini)", True)
-    sel_cities = st.multiselect("City", ["Odessa", "Midland"], [])
-    sel_prices = st.multiselect("Price", ["$", "$$", "$$$", "$$$$", "None"], [])
-    min_stars = st.slider("Min stars", 0.0, 5.0, 3.5, 0.5)
-    k_consider = st.slider("Top matches to consider (k)", 3, 20, 8)
+with col1:
+    # GPT Toggle
+    if USE_LLM:
+        enable_gpt = st.toggle("🤖 Enable AI Insights", value=True, help="Get enhanced responses with GPT-4o-mini")
+    else:
+        st.info("💡 Add OPENAI_API_KEY to your .env file to enable AI insights")
+        enable_gpt = False
 
-    st.caption(
-        "Tip: Try queries like **'worst rated pizza in Odessa'**, "
-        "**'top 3 tacos $$ in Midland'**, or a brand like **'Domino’s Odessa'**."
-    )
+with col2:
+    # Clear Chat Button
+    if st.button("🗑️ Clear Chat", help="Clear all chat history"):
+        st.session_state.history = []
+        st.rerun()
 
-# ============================ Helpers ============================
+SYSTEM_PROMPT = """You are an intelligent restaurant assistant specialized in Odessa & Midland.
+Use ONLY the supplied candidates and/or the numbered review context. If the answer isn’t in the context, say so briefly.
+- “Best/Top” → highest rated; “Worst” → lowest rated; “Average” → compute average rating/price/review count.
+- Interpret $..$$$$ via price column. Filter by city words (Odessa, Midland).
+- Do not invent restaurant names. Prefer items with higher review_count.
+- Cite passages with [1], [2] etc. when you use the review context."""
+
+# ------------- Helpers -------------
 WORD_STRIP = re.compile(r"[^a-z0-9\s'-]+")
-STOPWORDS = {
-    "the","a","an","and","of","on","in","at","by","for","to","with","from",
-    "restaurant","kitchen","cafe","bar","grill","bbq","food","house","shop",
-    "market","express","bistro","diner","bakery","coffee","tea","donut","donuts",
-    "donut shop","odessa","midland","tx","near","me","best","top","find","good",
-}
-
-REQUIRED_COLS = [
-    "name","url","rating","review_count","city","address","categories","price"
-]
-
-def ensure_columns(df: pd.DataFrame) -> pd.DataFrame:
-    """Ensure the dataframe has all columns used downstream."""
-    df = df.copy()
-    for col in REQUIRED_COLS:
-        if col not in df.columns:
-            df[col] = "" if col not in ("rating","review_count") else 0
-    # normalize numeric
-    df["rating"] = pd.to_numeric(df["rating"], errors="coerce").fillna(0.0)
-    df["review_count"] = pd.to_numeric(df["review_count"], errors="coerce").fillna(0).astype(int)
-    # safe strings
-    for c in ["name","url","city","address","categories","price"]:
-        df[c] = df[c].astype(str).fillna("")
-    return df
-
-def _norm(s: str) -> str:
-    s = unicodedata.normalize("NFKD", s or "").lower()
-    s = s.replace("’", "'").replace("`", "'")
+def _norm(s:str)->str:
+    s = unicodedata.normalize("NFKD", s or "").lower().replace("’","'").replace("`","'")
     s = WORD_STRIP.sub(" ", s)
-    s = re.sub(r"\s+", " ", s).strip()
-    return s
+    return re.sub(r"\s+"," ", s).strip()
 
-def _sig_tokens(s: str) -> List[str]:
-    return [t for t in _norm(s).split() if len(t) >= 2 and t not in STOPWORDS]
+FOOD_HINTS = {"restaurant","restaurants","eat","food","breakfast","brunch","lunch","dinner",
+    "pizza","burger","taco","bbq","wings","coffee","pho","ramen","mexican","italian","chinese","thai","indian",
+    "taqueria","pizzeria","rating","reviews","review","stars","price","$","$$","$$$","$$$$",
+    "odessa","midland",
+    # Major Fast Food Chains
+    "domino","dominos","domino's","mcdonald","mcdonalds","mcdonald's","starbucks","panda","panda express",
+    "kfc","popeyes","pizza hut","whataburger","little caesar","little caesars","subway","taco bell",
+    "burger king","wendy","wendys","wendy's","chick-fil-a","chik-fil-a","chick fil a","chik fil a",
+    "jack in the box","chipotle","five guys","sonic","arby","arbys","arby's","carl","carls jr","carl's jr",
+    "denny","dennys","denny's","ihop","wingstop","buffalo wild wings",
+    # Casual Dining
+    "olive garden","red lobster","applebees","chili","chilis","chili's","outback","texas roadhouse","longhorn",
+    # Restaurant Operations
+    "hours","opening","open","closed","when does","what time","szechuan","house","cafe","diner","grill","kitchen",
+    "hour","time","closing","rating","worst","best","cafe","this restaurant"}
+def is_yelp_intent(q:str)->bool:
+    qn=_norm(q)
+    
+    # Check for explicit non-food queries first
+    non_food_keywords = {
+        "weather", "temperature", "forecast", "rain", "sunny", "cloudy",
+        "news", "sports", "politics", "stock", "market", "price of",
+        "time", "date", "calendar", "schedule", "appointment",
+        "directions", "map", "phone number", "contact",
+        "who are you", "what are you", "help", "hello", "hi", "hey"
+    }
+    
+    # Check for non-food keywords with word boundaries to avoid false matches
+    for keyword in non_food_keywords:
+        if keyword in qn:
+            # Check if it's a whole word match to avoid false positives
+            import re
+            pattern = r'\b' + re.escape(keyword) + r'\b'
+            if re.search(pattern, qn):
+                return False
+    
+    # Check for food-related keywords
+    return any(h in qn for h in FOOD_HINTS)
 
-def _bigrams(tokens: List[str]) -> Set[str]:
-    return {" ".join(tokens[i:i+2]) for i in range(len(tokens)-1)}
+BEST_WORDS={"best","top","highest","top rated"}; WORST_WORDS={"worst","lowest","low rated"}
+AVG_WORDS={"avg","average","mean"}; FEW_REVIEWS={"few reviews","least reviews","low reviews","newest"}
+LIMIT_RE=re.compile(r"\b(top|show|list)\s+(\d{1,2})\b", re.I)
+CITY_RE=re.compile(r"\b(odessa|midland)\b", re.I)
+STARS_RE=re.compile(r"(\d(?:\.\d)?)\s*\+?\s*stars?", re.I)
+PRICE_RE=re.compile(r"\$|\$\$|\$\$\$|\$\$\$\$|price\s*[:=]?\s*(none|n/a)", re.I)
 
-def _apply_filters(df: pd.DataFrame) -> pd.DataFrame:
-    df2 = ensure_columns(df)
-    if sel_cities:
-        df2 = df2[df2["city"].isin(sel_cities)]
-    if sel_prices:
-        df2 = df2[df2["price"].isin(sel_prices)]
-    return df2[df2["rating"] >= float(min_stars)]
+def parse_limit(q, default_k): 
+    m=LIMIT_RE.search(q); 
+    return max(1,min(20,int(m.group(2)))) if m else default_k
+def parse_cities(q): return list({m.group(1).title() for m in CITY_RE.finditer(q)})
+def parse_min_stars(q, d): 
+    m=STARS_RE.search(q); 
+    return float(m.group(1)) if m else d
+def parse_prices(q):
+    out=[]; 
+    for m in PRICE_RE.finditer(q):
+        t=m.group(0).lower()
+        out.append("None" if "none" in t or "n/a" in t else "$$$$" if "$$$$" in t else "$$$" if "$$$" in t else "$$" if "$$" in t else "$")
+    res=[]; seen=set()
+    for p in out:
+        if p not in seen: res.append(p); seen.add(p)
+    return res
+def intent_kind(q):
+    qn=_norm(q)
+    if any(w in qn for w in BEST_WORDS): return "best"
+    if any(w in qn for w in WORST_WORDS): return "worst"
+    if any(w in qn for w in AVG_WORDS): return "average"
+    if any(w in qn for w in FEW_REVIEWS): return "few_reviews"
+    return "generic"
 
-def _format_rows(df: pd.DataFrame, limit: int) -> List[str]:
-    rows = []
-    for _, r in df.head(limit).iterrows():
-        name = str(r.get("name","")).strip() or "Unknown"
-        url  = str(r.get("url","")).strip() or "#"
-        rating = float(r.get("rating",0.0))
-        price  = (r.get("price") or "N/A")
-        rc     = int(r.get("review_count",0))
-        city   = r.get("city","")
-        addr   = r.get("address","")
-        rows.append(f"- [{name}]({url}) — ⭐{rating:.1f} • {price} • {rc} reviews • {city} • {addr}")
-    return rows
-
-def _sources_chips(df: pd.DataFrame, limit: int) -> str:
-    df = ensure_columns(df)
-    chips = []
-    for _, r in df.head(limit).iterrows():
-        rating = float(r.get("rating",0.0))
-        price  = (r.get("price") or "N/A")
-        name   = str(r.get("name","")).strip() or "Unknown"
-        url    = str(r.get("url","")).strip() or "#"
-        chips.append(
-            f"<span class='source-pill'>⭐ {rating:.1f} • {price} — "
-            f"<a href='{html.escape(url)}' target='_blank'>{html.escape(name)}</a></span>"
-        )
-    return "\n".join(chips)
-
-# ================== Greeting + non-food gates ====================
-GREETING_PHRASES = {
-    "hello", "hi", "hey", "yo", "sup", "good morning",
-    "good afternoon", "good evening", "what's up", "how are you"
-}
-
-def is_greeting_only(q: str) -> bool:
-    qn = _norm(q)
-    tokens = set(qn.split())
-    if not (any(phrase in qn for phrase in GREETING_PHRASES) or tokens & GREETING_PHRASES):
-        return False
-    if any(x in qn for x in ["chick fil", "hibachi", "kfc", "pizza", "burger", "restaurant", "taco", "domino"]):
-        return False
-    return True
-
-CATEGORY_SYNONYMS: Dict[str, List[str]] = {
-    "pizza": ["pizza", "pizzeria", "slice", "pie"],
-    "burgers": ["burger", "cheeseburger"],
-    "bbq": ["bbq", "barbecue", "smokehouse"],
-    "sandwich": ["sandwich", "subs", "submarine", "hoagie", "deli"],
-    "chinese": ["chinese", "dumpling", "noodles", "szechuan", "hot pot"],
-    "coffee": ["coffee", "espresso", "latte", "cafe"],
-    "seafood": ["seafood", "fish", "crab", "shrimp", "oyster"],
-    "chicken": ["chicken", "fried chicken", "tenders", "wings"],
-    "indian": ["indian", "biryani", "curry", "tandoori", "masala"],
-    "mexican": ["mexican", "taqueria", "tacos", "burrito", "al pastor", "barbacoa", "carnitas"],
-    "breakfast": ["breakfast", "brunch", "pancake", "waffle"],
-    "italian": ["italian", "pasta", "trattoria", "ristorante"],
-    "desserts": ["dessert", "ice cream", "gelato", "frozen yogurt"],
-    "vegan": ["vegan", "plant based"],
-    "thai": ["thai", "pad thai", "tom yum"],
-    "korean": ["korean", "bibimbap", "kimchi"],
-    "vietnamese": ["vietnamese", "pho", "banh mi"],
-    "noodles": ["noodles", "ramen", "udon", "soba"],
-    "wings": ["wings", "chicken wings", "buffalo wings"],
-    "shawarma": ["shawarma"],
-    "kebab": ["kebab"],
-    "gyro": ["gyro"],
-    "steak": ["steak", "steakhouse", "prime rib"],
-    "food trucks": ["food truck", "food trucks"],
-}
-
-def find_category_terms(text: str) -> List[str]:
-    qn = _norm(text)
-    found = []
-    for canon, syns in CATEGORY_SYNONYMS.items():
-        if any(re.search(rf"\b{re.escape(s)}\b", qn) for s in syns + [canon]):
-            found.append(canon)
-    return found
-
-FOOD_HINTS = {
-    "restaurant","restaurants","eat","food","dine","dining","brunch","breakfast","lunch","dinner",
-    "menu","cuisine","dish","dishes","takeout","delivery","open now","open",
-    "rating","ratings","reviews","review","stars","address","price","$", "$$", "$$$",
-    "reservation","drive thru","drive-thru","bar","cafe","bakery","taqueria","pizzeria"
-}
-FOOD_HINTS |= set(sum(CATEGORY_SYNONYMS.values(), []))
-
-def looks_like_food_intent(q: str) -> bool:
-    qn = _norm(q)
-    if not qn:
-        return False
-    if any(h in qn for h in FOOD_HINTS):
-        return True
-    if re.search(r"\$\$?|\b\d(\.\d)?\s*stars?\b", qn):
-        return True
-    if re.search(r"\b(odessa|midland)\b", qn) and re.search(r"\b(best|top|find|near|closest|worst|lowest|low rated)\b", qn):
-        return True
-    return False
-
-# ========================= Retriever =============================
-@st.cache_resource(show_spinner=False)
+# ------------- Retriever -------------
 def get_retriever():
-    try:
-        r = Retriever()
-        # Ensure docs shape
-        r.docs = ensure_columns(r.docs)
-        return r
-    except Exception as e:
-        return e  # return the exception so we can show a friendly error
+    return Retriever()
 
 retriever = get_retriever()
-if isinstance(retriever, Exception):
-    st.error(
-        "Failed to initialize retrieval backend.\n\n"
-        f"Details: {retriever}\n\n"
-        "Check that your processed CSVs exist and that utils.rag.Retriever loads them correctly."
-    )
-    st.stop()
 
-# ========================= Brands ================================
-CHAIN_BRANDS: Dict[str, List[str]] = {
-    "dominos": ["domino's", "dominos", "domino s", "domin0s", "dominoes"],
-    "kfc": ["kfc", "kentucky fried chicken"],
-    "mcdonalds": ["mcdonald's","mcdonalds","mc donald","mc-donalds","macdonalds","mac donalds","mcd"],
-    "pizza hut": ["pizza hut","pizzahut","pizza-hut"],
-    "chick fil a": ["chick-fil-a","chick fil a","chik fil a","chikfila"],
-    "popeyes": ["popeyes","popeye's"],
-    "whataburger": ["whataburger"],
-    "burger king": ["burger king","burger-king"],
-    "taco bell": ["taco bell","tacobell"],
-    "little caesars": ["little caesars","little caesar","little ceasar"],
-    "marcos pizza": ["marco's pizza","marcos pizza","marco s pizza"],
-}
-
-@st.cache_resource(show_spinner=False)
-def build_dataset_brands(docs: pd.DataFrame) -> Dict[str, Dict[str, Set[str]]]:
-    out: Dict[str, Dict[str, Set[str]]] = {}
-    for name in docs["name"].dropna().unique():
-        full = _norm(name)
-        if not full or len(full) < 5:
-            continue
-        toks = _sig_tokens(name)
-        if not toks:
-            continue
-        bgs = _bigrams(toks)
-        if not bgs and len(toks) < 2:
-            continue
-        out[full] = {"full": {full, full.replace("'", "")}, "bigrams": bgs}
-    return out
-
-DATASET_BRANDS = build_dataset_brands(retriever.docs)
-
-def detect_brand(q: str) -> Optional[str]:
-    qn = _norm(q)
-    for canon, pats in CHAIN_BRANDS.items():
-        if any(_norm(p) in qn for p in pats + [canon]):
-            return canon
-    # dataset-derived brands (full phrase or any bigram)
-    for canon, parts in DATASET_BRANDS.items():
-        if any((" " in fv and fv in qn) for fv in parts["full"]):
-            return canon
-        if any(bg in qn for bg in parts["bigrams"]):
-            return canon
-    return None
-
-# ===================== Sort & Limit parsing =======================
-SORT_PHRASES_HIGH = {"best","highest","top","great","good","high rated","top rated"}
-SORT_PHRASES_LOW  = {"worst","lowest","low rated","bad","avoid"}
-FEW_REVIEWS_PHRASES = {"few reviews","low reviews","new","newest","least reviews","low review"}
-LIMIT_RE = re.compile(r"\b(top|show|list)\s+(\d{1,2})\b")
-
-def parse_sort_and_limit(q: str) -> Tuple[str, bool, int]:
-    """
-    Returns: (sort_col, ascending, limit)
-      sort_col in {"rating","review_count"}
-      ascending: True for lowest/least
-      limit: default 8 or user-specified (1..20)
-    """
-    qn = _norm(q)
-    limit = 8
-    m = LIMIT_RE.search(qn)
-    if m:
-        try:
-            limit = max(1, min(20, int(m.group(2))))
-        except Exception:
-            pass
-
-    # default: rating desc (best first)
-    sort_col, ascending = "rating", False
-
-    if any(p in qn for p in SORT_PHRASES_LOW):
-        sort_col, ascending = "rating", True
-    elif any(p in qn for p in FEW_REVIEWS_PHRASES):
-        sort_col, ascending = "review_count", True
-    elif any(p in qn for p in SORT_PHRASES_HIGH):
-        sort_col, ascending = "rating", False
-
-    return sort_col, ascending, limit
-
-def sort_limit(df: pd.DataFrame, q: str) -> Tuple[pd.DataFrame, int]:
-    df = ensure_columns(df)
-    col, asc, limit = parse_sort_and_limit(q)
-    if col in df.columns:
-        df = df.sort_values([col,"rating"], ascending=[asc, asc]).copy()
-    else:
-        df = df.sort_values(["rating","review_count"], ascending=[False, False]).copy()
-    return df, limit
-
-# ===================== Multi-intent splitter =====================
-def split_intents(q: str) -> List[str]:
-    q = q.strip()
-    if " and " in _norm(q) or "," in q or "&" in q or "\n" in q or "?" in q:
-        parts = re.split(r"(?:\s+and\s+|&|,|\n|[?])", q, flags=re.IGNORECASE)
-        parts = [p.strip() for p in parts if p and _norm(p)]
-        seen = set(); uniq = []
-        for p in parts:
-            np = _norm(p)
-            if np not in seen:
-                uniq.append(p); seen.add(np)
-        return uniq[:3]
-    return [q]
-
-# ====================== Answer primitives ========================
-def answer_brand(one_q: str, brand: str) -> Tuple[str, pd.DataFrame]:
-    df = retriever.docs
-    pats = CHAIN_BRANDS.get(brand, [brand])
-    mask = df["name"].fillna("").apply(lambda x: any(_norm(p) in _norm(x) for p in pats + [brand]))
-    df = _apply_filters(df[mask])
-    if not df.empty:
-        df, limit = sort_limit(df, one_q)
-        return f"**{one_q.strip()}**\n\n" + "\n".join(_format_rows(df, limit)), df.head(limit)
-
-    # fallback: show category-similar results if brand not present
-    cat_terms = []
-    if "kfc" in brand:
-        cat_terms = ["chicken"]
-    elif any(x in brand for x in ["domino","marcos","pizza"]):
-        cat_terms = ["pizza"]
-    else:
-        cat_terms = find_category_terms(one_q) or ["pizza"]
-
-    df2 = retriever.docs
-    cat_mask = df2["categories"].str.contains("|".join([re.escape(c) for c in cat_terms]), case=False, na=False)
-    df2 = _apply_filters(df2[cat_mask])
-    if df2.empty:
-        return f"**{one_q.strip()}**\n\nI couldn’t find **{brand.title()}** in the current dataset for these filters.", pd.DataFrame()
-    df2, limit = sort_limit(df2, one_q)
-    note = f"_No {brand.title()} found in dataset; showing {', '.join(cat_terms)} instead._\n\n"
-    return f"**{one_q.strip()}**\n\n{note}" + "\n".join(_format_rows(df2, limit)), df2.head(limit)
-
-def answer_category(one_q: str, cats: List[str]) -> Tuple[str, pd.DataFrame]:
-    dfc = retriever.docs
-    cat_regex = "|".join([re.escape(c) for c in cats])
-    cat_mask = dfc["categories"].str.contains(cat_regex, case=False, na=False)
-    dfc = _apply_filters(dfc[cat_mask])
-    if dfc.empty:
-        return f"**{one_q.strip()}**\n\nI couldn’t find results that match your filters.", pd.DataFrame()
-    dfc, limit = sort_limit(dfc, one_q)
-    label = ", ".join(cats).title()
-    col, asc, _ = parse_sort_and_limit(one_q)
-    header = f"Top {limit} {label}:" if not (col == "review_count" and asc) else f"Least-reviewed {label}:"
-    return f"**{one_q.strip()}**\n\n{header}\n\n" + "\n".join(_format_rows(dfc, limit)), dfc.head(limit)
-
-def _safe_retrieval(q: str, k: int, filters: dict) -> List[dict]:
-    try:
-        hits = retriever.search(q, k=k, filters=filters)
-        return hits or []
-    except Exception as e:
-        st.warning(f"Retrieval error: {e}")
-        return []
-
-def answer_retrieval_only(one_q: str) -> Tuple[str, pd.DataFrame]:
-    filters = {"min_stars": min_stars}
-    if sel_cities: filters["city"] = sel_cities
-    if sel_prices: filters["price"] = sel_prices
-    hits = _safe_retrieval(one_q, k_consider, filters)
-    if not hits:
-        return f"**{one_q.strip()}**\n\nI couldn’t find results that match your filters.", pd.DataFrame()
-    df = ensure_columns(pd.DataFrame(hits))
-    df, limit = sort_limit(df, one_q)
-    return f"**{one_q.strip()}**\n\n" + "\n".join(_format_rows(df, limit)), df.head(limit)
-
-def rag_llm_answer(one_q: str) -> Tuple[str, pd.DataFrame]:
-    # retrieval for context
-    filters = {"min_stars": min_stars}
-    if sel_cities: filters["city"] = sel_cities
-    if sel_prices: filters["price"] = sel_prices
-    hits = _safe_retrieval(one_q, k_consider, filters)
-    df_hits = ensure_columns(pd.DataFrame(hits)) if hits else pd.DataFrame()
-
-    def bullets(hs: List[dict], q: str) -> str:
-        df = ensure_columns(pd.DataFrame(hs)) if hs else pd.DataFrame()
-        if df.empty: return "No matches."
-        df, limit = sort_limit(df, q)
-        out = []
-        for _, r in df.head(limit).iterrows():
-            name = html.escape(str(r["name"]))
-            cats = html.escape(str(r["categories"]))
-            rating = float(r["rating"])
-            price = (r["price"] or "N/A")
-            out.append(f"- **{name}** (⭐{rating:.1f} • {price}) — {cats}")
-        return "\n".join(out)
-
-    # Early exit if model key missing or toggle off
-    if not USE_LLM or not os.getenv("OPENAI_API_KEY"):
-        return f"**{one_q.strip()}**\n\n{bullets(hits, one_q)}", df_hits
-
-    model_name = os.getenv("OPENAI_MODEL","gpt-4o-mini")
-    prompt = f"Filters → city: {sel_cities or ['Odessa','Midland']}, price: {sel_prices or 'any'}, min_stars: {min_stars}\n\n{build_prompt(one_q, hits)}"
-    messages = [
-        {"role":"system","content":"You are a concise, evidence-based Odessa/Midland restaurant assistant. Use ONLY the provided context; if unsure, say you don’t know."},
-        {"role":"user","content":prompt},
-    ]
-
-    it, err = stream_text(messages, model=model_name, temperature=0.2, max_tokens=320)
-    if it is None:
-        # Fallback to retrieval bullets if streaming fails
-        fallback = bullets(hits, one_q)
-        if err:
-            fallback = f"(LLM error: {err})\n\n" + fallback
-        return f"**{one_q.strip()}**\n\n{fallback}", df_hits
-
-    out = ""
-    try:
-        for tok in it:
-            out += tok
-        if not out.strip():
-            out = bullets(hits, one_q)
-        return f"**{one_q.strip()}**\n\n{out}", df_hits
-    except Exception as e:
-        return f"**{one_q.strip()}**\n\n(LLM stream error: {e})\n\n{bullets(hits, one_q)}", df_hits
-
-def answer_one_intent(one_q: str) -> Tuple[str, pd.DataFrame]:
-    brand = detect_brand(one_q)
-    if brand:
-        return answer_brand(one_q, brand)
-    cats = find_category_terms(one_q)
-    if cats:
-        return answer_category(one_q, cats)
-    if USE_LLM:
-        return rag_llm_answer(one_q)
-    return answer_retrieval_only(one_q)
-
-# ====================== Chat history UI ==========================
-if "history" not in st.session_state:
-    st.session_state.history = []
-
-# Show prior messages
+# ------------- Chat history -------------
+if "history" not in st.session_state: st.session_state.history=[]
 for role, msg in st.session_state.history:
-    css = "bubble bubble-user" if role == "user" else "bubble bubble-assist"
-    st.markdown(f"<div class='{css}'>{msg}</div>", unsafe_allow_html=True)
+    if role == "user":
+        css = "bubble bubble-user"
+        icon = "👤"
+        st.markdown(f"<div class='{css}'><strong>{icon} You:</strong><br>{msg}</div>", unsafe_allow_html=True)
+    else:
+        css = "bubble bubble-assist"
+        icon = "🤖"
+        st.markdown(f"<div class='{css}'><strong>{icon} Assistant:</strong><br>{msg}</div>", unsafe_allow_html=True)
 
-# =========================== Input ===============================
-placeholder = "Ask about restaurants… e.g., 'worst rated pizza in Odessa', 'top 3 tacos $$ in Midland'"
-q = st.chat_input(placeholder)
-
-# If no input yet, show gentle nudge and stop (no errors)
-if not q:
-    st.stop()
-
-# Store & render user bubble
+q = st.chat_input("Ask me — food questions! Try 'best pizza in Odessa' '")
+if not q: st.stop()
 st.session_state.history.append(("user", html.escape(q)))
-st.markdown(f"<div class='bubble bubble-user'>{html.escape(q)}</div>", unsafe_allow_html=True)
+st.markdown(f"<div class='bubble bubble-user'><strong>👤 You:</strong><br>{html.escape(q)}</div>", unsafe_allow_html=True)
 
-# gates
-if is_greeting_only(q):
-    msg = (
-        "👋 Hello! I’m your Odessa & Midland restaurant assistant.\n\n"
-        "Try:\n"
-        "• *Worst rated pizza in Odessa*\n"
-        "• *Few reviews Mexican in Midland (top 5)*\n"
-        "• *Top 3 tacos under $$ in Midland*\n"
-        "• *Domino’s in Odessa*"
-    )
-    st.markdown(f"<div class='bubble bubble-assist'>{msg}</div>", unsafe_allow_html=True)
-    st.session_state.history.append(("assistant", msg))
+# ------------- Branch on intent -------------
+if not is_yelp_intent(q):
+    # For non-food questions, provide helpful AI response if enabled
+    if USE_LLM and enable_gpt:
+        try:
+            # Check if it's a system/identity question
+            identity_keywords = ['who are you', 'what are you', 'what is this', 'what do you do', 'introduce yourself', 'tell me about yourself']
+            is_identity_question = any(keyword in q.lower() for keyword in identity_keywords)
+            
+            if is_identity_question:
+                # Special response for identity questions
+                identity_system_prompt = """You are an AI assistant specialized in analyzing restaurant reviews and providing recommendations for Odessa and Midland, Texas. 
+                You help users find the best restaurants, analyze ratings, and provide insights about local dining options.
+                Be friendly and explain your purpose clearly."""
+                
+                result, err = complete_text(
+                    [{"role":"system","content": identity_system_prompt},
+                     {"role":"user","content": f"User asked: '{q}'. Please introduce yourself as the Odessa/Midland restaurant review analyzer."}],
+                    model=os.getenv("OPENAI_MODEL","gpt-4o-mini"),
+                    temperature=0.3,
+                    max_tokens=300,
+                )
+            else:
+                # General questions
+                general_system_prompt = """You are a helpful assistant for the Odessa & Midland area. 
+                You can help with general questions about the area, weather, local information, or anything else.
+                Be friendly, helpful, and conversational. If you don't know something specific about Odessa/Midland, 
+                say so but still try to be helpful."""
+                
+                result, err = complete_text(
+                    [{"role":"system","content": general_system_prompt},
+                     {"role":"user","content": f"User asked: '{q}'. Please provide a helpful response."}],
+                    model=os.getenv("OPENAI_MODEL","gpt-4o-mini"),
+                    temperature=0.3,
+                    max_tokens=300,
+                )
+            
+            if result:
+                txt = f"💡 **AI Response:** {result.strip()}\n\n_Note: I'm specialized in Odessa & Midland restaurant recommendations! Ask me about food, restaurants, ratings, or dining options in the area._"
+            else:
+                txt = f"Happy to help — ask me Odessa/Midland food questions or anything else.\n\n_AI insights unavailable: {err}_"
+        except Exception as e:
+            txt = f"Happy to help — ask me Odessa/Midland food questions or anything else.\n\n_AI insights unavailable: {str(e)}_"
+    else:
+        txt = "Happy to help — ask me Odessa/Midland food questions or anything else."
+    
+    st.markdown(f"<div class='bubble bubble-assist'>{txt}</div>", unsafe_allow_html=True)
+    st.session_state.history.append(("assistant", txt))
     st.stop()
 
-if not looks_like_food_intent(q) and not detect_brand(q):
-    msg = (
-        "🙂 I’m focused on restaurants in Odessa & Midland.\n\n"
-        "Ask things like *'worst rated pizza in Odessa'*, *'few reviews brunch in Midland'*, or *'Domino’s Odessa'*."
-    )
-    st.markdown(f"<div class='bubble bubble-assist'>{msg}</div>", unsafe_allow_html=True)
-    st.session_state.history.append(("assistant", msg))
-    st.stop()
+# ---- Parse NL filters
+k = parse_limit(q, DEFAULT_K)
+min_stars = parse_min_stars(q, DEFAULT_MIN_STARS)
+prices = parse_prices(q)
+cities = parse_cities(q)
+kind = intent_kind(q)
 
-# ====================== Multi-intent loop =======================
-def sources_block(df: pd.DataFrame, title: str = "Sources") -> str:
-    if df is None or df.empty:
-        return ""
-    _, limit = sort_limit(df, q)  # reuse limit display
-    return f"<div class='small-muted'>{title}</div>" + _sources_chips(df, limit)
+filters: Dict[str, object] = {"min_stars": min_stars}
+if cities: filters["city"] = cities
+if prices: filters["price"] = prices
 
-sub_queries = split_intents(q)
-sections: List[str] = []
-sources_html_parts: List[str] = []
+def safe_search(query, k, f):
+    try: 
+        # For brand-specific queries, don't apply star rating filter
+        # Normalize query to handle spaces, apostrophes, and case variations
+        normalized_query = query.lower().replace("'", "").replace(" ", "")
+        brand_queries = [
+            'dominos', 'domino', 'pandaexpress', 'panda', 'starbucks', 'mcdonald', 'mcdonalds', 
+            'kfc', 'pizzahut', 'subway', 'tacobell', 'burgerking', 'wendy', 'wendys',
+            'chickfila', 'chikfila', 'whataburger', 'jackinthebox', 'popeyes', 'littlecaesar',
+            'littlecaesars', 'chipotle', 'fiveguys', 'sonic', 'arby', 'arbys', 'carl',
+            'carlsjr', 'denny', 'dennys', 'ihop', 'wingstop', 'buffalowild', 'olivegarden',
+            'redlobster', 'applebees', 'chili', 'chilis', 'outback', 'texasroadhouse', 'longhorn'
+        ]
+        
+        if any(brand in normalized_query for brand in brand_queries):
+            f = {k: v for k, v in f.items() if k != 'min_stars'}
+        
+        results = retriever.search(query, k=k, filters=f) or []
+        return results
+    except Exception as e:
+        st.warning(f"Retrieval error: {e}"); return []
 
-for sq in sub_queries:
-    if not _norm(sq):
-        continue
-    ans, dfans = answer_one_intent(sq)
-    sections.append(ans)
-    src_html = sources_block(dfans)
-    if src_html:
-        sources_html_parts.append(src_html)
+# progressive relaxation so we always answer with data
+hits = safe_search(q, k, filters) or safe_search(q, k, {**filters, "price": None}) \
+    or safe_search(q, k, {"min_stars": filters.get("min_stars",0.0)}) \
+    or safe_search("", k, {"min_stars": 0.0})
 
-final_answer = "\n\n".join(sections).strip()
-st.markdown(f"<div class='bubble bubble-assist'>{final_answer}</div>", unsafe_allow_html=True)
-for s in sources_html_parts:
-    st.markdown(s, unsafe_allow_html=True)
-st.session_state.history.append(("assistant", final_answer))
+df = pd.DataFrame(hits)
+
+# ranking tweaks (best/worst/few reviews)
+if not df.empty:
+    if kind == "best":  
+        # For "best", prioritize restaurants with more reviews for reliability
+        # Create a reliability score: rating * log(review_count + 1) to balance rating and review count
+        df = df.copy()
+        df["reliability_score"] = df["rating"] * np.log(df["review_count"] + 1)
+        df = df.sort_values(["reliability_score", "review_count"], ascending=[False, False])
+    elif kind == "worst": 
+        df = df.sort_values(["rating","review_count"], ascending=[True, True])
+    elif kind == "few_reviews": 
+        df = df.sort_values(["review_count","rating"], ascending=[True, False])
+
+# bullets for UI
+def bullets(frame: pd.DataFrame, limit: int) -> str:
+    if frame is None or frame.empty:
+        return "I couldn't load local rows yet."
+    
+    out = []
+    for i, (_, r) in enumerate(frame.head(limit).iterrows(), 1):
+        name = html.escape(str(r.get("name","Unknown")))
+        url  = html.escape(str(r.get("url","#")) or "#")
+        rating = float(r.get("rating",0.0))
+        rc = int(r.get("review_count",0))
+        price = r.get("price") or "N/A"
+        city = html.escape(str(r.get("city","")))
+        addr = html.escape(str(r.get("address","")))
+        categories = html.escape(str(r.get("categories","")))
+        
+        # Clean up categories display
+        cat_display = ""
+        if categories and categories != "nan" and len(categories) < 60:
+            # Limit categories to first 2-3 items for readability
+            cat_list = categories.split(", ")[:2]
+            cat_display = f"<br><small style='color: #9aa4af;'>🍽️ {', '.join(cat_list)}</small>"
+        
+        # Create organized restaurant card
+        restaurant_card = f"""
+<div style="margin: 12px 0; padding: 12px; border: 1px solid #454c54; border-radius: 8px; background: #21262d;">
+    <div style="display: flex; justify-content: space-between; align-items: start;">
+        <div style="flex: 1;">
+            <h4 style="margin: 0 0 4px 0; color: #58a6ff;">
+                <a href="{url}" target="_blank" style="text-decoration: none; color: #58a6ff;">{i}. {name}</a>
+            </h4>
+            <div style="color: #f0f6fc; font-size: 14px; margin-bottom: 4px;">
+                ⭐ <strong>{rating:.1f}</strong> • {price} • {rc} reviews
+            </div>
+            <div style="color: #8b949e; font-size: 13px;">
+                📍 {city} • {addr}
+            </div>
+            {cat_display}
+        </div>
+    </div>
+</div>"""
+        out.append(restaurant_card)
+    
+    return "".join(out)
+
+answer = bullets(df, k)
+
+# Average summary (on request)
+if kind == "average" and not df.empty:
+    ratings = [float(x) for x in df["rating"].dropna().tolist()]
+    reviews = [int(x) for x in df["review_count"].dropna().tolist()]
+    avg_rating = statistics.mean(ratings) if ratings else 0.0
+    avg_reviews = statistics.mean(reviews) if reviews else 0.0
+    def p2n(p): return 1 if p=="$" else 2 if p=="$$" else 3 if p=="$$$" else 4 if p=="$$$$" else None
+    price_vals = [p2n(str(p)) for p in df["price"] if p2n(str(p)) is not None]
+    avg_price = statistics.mean(price_vals) if price_vals else None
+    price_txt = "N/A" if avg_price is None else {1:"$",2:"$$",3:"$$$",4:"$$$$"}.get(round(avg_price), "N/A")
+    answer += f"\n\n_Averages across shown results → rating: ⭐{avg_rating:.2f}, reviews: {avg_reviews:.0f}, price: {price_txt}_"
+
+# ---- Enhanced GPT Integration ----
+llm_block = ""
+if USE_LLM and enable_gpt:
+    # Try to get review passages for context
+    passages = retrieve_review_passages(q, k=6)
+    
+    # Build context from both search results and review passages
+    cand_block = build_prompt(q, df.head(k).to_dict(orient="records")) if not df.empty else ""
+    
+    if passages:
+        # Enhanced context with review passages
+        ctx_block, numbered = build_context_block(passages)
+        user_msg = f"{cand_block}\n\nReview Context (numbered passages):\n{ctx_block}\n\nAnswer the question using the restaurant candidates and review context. Use bracketed citations like [1], [2] when referencing reviews. Prefer items with higher review counts."
+    else:
+        # Fallback to restaurant candidates only
+        user_msg = f"{cand_block}\n\nAnswer the question about these restaurants. Provide helpful insights about ratings, prices, and locations. Be conversational and helpful."
+    
+    # Enhanced system prompt
+    enhanced_system_prompt = f"""{SYSTEM_PROMPT}
+
+Additional guidelines:
+- Be conversational and helpful in your responses
+- Provide insights about ratings, prices, and locations
+- For "best" restaurants: prioritize those with HIGH review counts (50+ reviews) over high ratings with few reviews
+- A restaurant with 5.0 stars but only 1-2 reviews is NOT reliable - prefer restaurants with 4.0+ stars and 20+ reviews
+- If asked about "worst" restaurants, explain the rating concerns
+- Always mention review counts when discussing reliability: "highly rated with X reviews" vs "perfect rating but only X reviews"
+- Mention specific details like review counts and price ranges
+- Be encouraging about trying new places"""
+    
+    try:
+        result, err = complete_text(
+            [{"role":"system","content": enhanced_system_prompt},
+             {"role":"user","content": user_msg}],
+            model=os.getenv("OPENAI_MODEL","gpt-4o-mini"),
+            temperature=0.3,  # Slightly higher for more natural responses
+            max_tokens=500,   # More tokens for detailed responses
+        )
+        if result is None:
+            llm_block = f"\n\n💡 _Enhanced insights unavailable: {err}_"
+        else:
+            llm_block = f"\n\n💡 **AI Insights:** {result.strip()}"
+    except Exception as e:
+        llm_block = f"\n\n💡 _Enhanced insights unavailable: {str(e)}_"
+
+final = answer + llm_block
+st.markdown(f"<div class='bubble bubble-assist'>{final}</div>", unsafe_allow_html=True)
+st.session_state.history.append(("assistant", final))
