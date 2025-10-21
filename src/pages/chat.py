@@ -387,49 +387,49 @@ if kind == "average" and not df.empty:
 
 # ---- Enhanced GPT Integration ----
 llm_block = ""
-if USE_LLM and enable_gpt:
-    # Try to get review passages for context
-    passages = retrieve_review_passages(q, k=6)
-    
-    # Build context from both search results and review passages
-    cand_block = build_prompt(q, df.head(k).to_dict(orient="records")) if not df.empty else ""
-    
-    if passages:
-        # Enhanced context with review passages
-        ctx_block, numbered = build_context_block(passages)
-        user_msg = f"{cand_block}\n\nReview Context (numbered passages):\n{ctx_block}\n\nAnswer the question using the restaurant candidates and review context. Use bracketed citations like [1], [2] when referencing reviews. Prefer items with higher review counts."
-    else:
-        # Fallback to restaurant candidates only
-        user_msg = f"{cand_block}\n\nAnswer the question about these restaurants. Provide helpful insights about ratings, prices, and locations. Be conversational and helpful."
-    
-    # Enhanced system prompt
-    enhanced_system_prompt = f"""{SYSTEM_PROMPT}
+# GPT integration moved to separate section below
 
-Additional guidelines:
-- Be conversational and helpful in your responses
-- Provide insights about ratings, prices, and locations
-- For "best" restaurants: prioritize those with HIGH review counts (50+ reviews) over high ratings with few reviews
-- A restaurant with 5.0 stars but only 1-2 reviews is NOT reliable - prefer restaurants with 4.0+ stars and 20+ reviews
-- If asked about "worst" restaurants, explain the rating concerns
-- Always mention review counts when discussing reliability: "highly rated with X reviews" vs "perfect rating but only X reviews"
-- Mention specific details like review counts and price ranges
-- Be encouraging about trying new places"""
-    
+# Display restaurant list first
+st.markdown(answer, unsafe_allow_html=True)
+
+# Display AI insights separately if available
+if USE_LLM and enable_gpt and not df.empty:
     try:
+        # Build prompt for AI insights
+        prompt = build_prompt(q, results)
+        enhanced_system_prompt = f"""{SYSTEM_PROMPT}
+        
+        Additional guidelines:
+        - For hours queries: Provide the exact hours from the candidates data.
+        - For "best" recommendations: Prioritize restaurants with 50+ reviews for reliability.
+        - Be conversational and helpful, but concise.
+        - Don't repeat information already visible in the restaurant cards."""
+        
         result, err = complete_text(
             [{"role":"system","content": enhanced_system_prompt},
-             {"role":"user","content": user_msg}],
+             {"role":"user","content": prompt}],
             model=os.getenv("OPENAI_MODEL","gpt-4o-mini"),
-            temperature=0.3,  # Slightly higher for more natural responses
-            max_tokens=500,   # More tokens for detailed responses
+            temperature=0.3,
+            max_tokens=500,
         )
+        
         if result is None:
-            llm_block = f"\n\n💡 _Enhanced insights unavailable: {err}_"
+            ai_insights = f"💡 _Enhanced insights unavailable: {err}_"
         else:
-            llm_block = f"\n\n💡 **AI Insights:** {result.strip()}"
+            ai_insights = f"💡 **AI Insights:** {result.strip()}"
+            
+        # Display AI insights in a separate bubble
+        st.markdown(f"<div class='bubble bubble-assist'>{ai_insights}</div>", unsafe_allow_html=True)
+        
+        # Store both parts in history
+        final_response = answer + f"\n\n{ai_insights}"
+        st.session_state.history.append(("assistant", final_response))
+        
     except Exception as e:
-        llm_block = f"\n\n💡 _Enhanced insights unavailable: {str(e)}_"
-
-final = answer + llm_block
-st.markdown(final, unsafe_allow_html=True)
-st.session_state.history.append(("assistant", final))
+        ai_insights = f"💡 _Enhanced insights unavailable: {str(e)}_"
+        st.markdown(f"<div class='bubble bubble-assist'>{ai_insights}</div>", unsafe_allow_html=True)
+        final_response = answer + f"\n\n{ai_insights}"
+        st.session_state.history.append(("assistant", final_response))
+else:
+    # No AI insights, just store the restaurant list
+    st.session_state.history.append(("assistant", answer))
