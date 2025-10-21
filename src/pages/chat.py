@@ -290,18 +290,32 @@ if not df.empty:
             out.append(f"Here are all available options:</div>")
         
         for i, (_, r) in enumerate(frame.head(limit).iterrows(), 1):
+            # Clean data properly
             name = html.escape(str(r.get("name","Unknown")))
-            url  = html.escape(str(r.get("url","#")) or "#")
+            url = html.escape(str(r.get("url","#")) or "#")
             rating = float(r.get("rating",0.0))
             rc = int(r.get("review_count",0))
-            price = r.get("price") or "N/A"
+            
+            # Handle price properly - convert nan to N/A
+            price_raw = r.get("price")
+            if pd.isna(price_raw) or str(price_raw).lower() == "nan" or str(price_raw).strip() == "":
+                price = "N/A"
+            else:
+                price = str(price_raw)
+            
             city = html.escape(str(r.get("city","")))
             addr = html.escape(str(r.get("address","")))
-            categories = html.escape(str(r.get("categories","")))
+            
+            # Handle categories properly - convert nan to empty string
+            categories_raw = r.get("categories","")
+            if pd.isna(categories_raw) or str(categories_raw).lower() == "nan" or str(categories_raw).strip() == "":
+                categories = ""
+            else:
+                categories = str(categories_raw)
             
             # Clean up categories display
             cat_display = ""
-            if categories and categories != "nan" and len(categories) < 60:
+            if categories and len(categories) < 60:
                 # Limit categories to first 2-3 items for readability
                 cat_list = categories.split(", ")[:2]
                 cat_display = f"<br><small style='color: #9aa4af;'>🍽️ {', '.join(cat_list)}</small>"
