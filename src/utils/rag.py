@@ -336,6 +336,7 @@ def build_prompt(question: str, hits: List[Dict]) -> str:
         return f"Question: {question}\n\nNo candidates."
     lines = []
     for h in hits:
+        hours_info = h.get('hours', 'Hours not available')
         lines.append(f"- **{h.get('name','?')}** (⭐{float(h.get('rating',0.0)):.1f} • {h.get('price','N/A')}) — "
-                     f"{h.get('categories','')} — {h.get('city','')}")
+                     f"{h.get('categories','')} — {h.get('city','')} — Hours: {hours_info}")
     return f"Question: {question}\n\nCandidates:\n" + "\n".join(lines)

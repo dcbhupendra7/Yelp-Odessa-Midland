@@ -66,7 +66,8 @@ Use ONLY the supplied candidates and/or the numbered review context. If the answ
 - Cite passages with [1], [2] etc. when you use the review context.
 - Be accurate about the data you see - if a restaurant shows "26 reviews", don't say it has "no review count data".
 - If there are very few restaurants of a specific cuisine type, mention this limitation.
-- Focus on the actual restaurants provided in the candidates list."""
+- Focus on the actual restaurants provided in the candidates list.
+- For hours queries: Use the hours data provided in the restaurant candidates. If hours are shown in the format "Monday: 11:00-14:30, 16:30-21:00", provide those exact hours."""
 
 # ------------- Helpers -------------
 WORD_STRIP = re.compile(r"[^a-z0-9\s'-]+")
