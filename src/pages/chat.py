@@ -67,7 +67,8 @@ Use ONLY the supplied candidates and/or the numbered review context. If the answ
 - Be accurate about the data you see - if a restaurant shows "26 reviews", don't say it has "no review count data".
 - If there are very few restaurants of a specific cuisine type, mention this limitation.
 - Focus on the actual restaurants provided in the candidates list.
-- For hours queries: Use the hours data provided in the restaurant candidates. If hours are shown in the format "Monday: 11:00-14:30, 16:30-21:00", provide those exact hours."""
+- For hours queries: Use the hours data provided in the restaurant candidates. If hours are shown in the format "Monday: 11:00-14:30, 16:30-21:00", provide those exact hours.
+- Be concise: Don't repeat information already visible in the restaurant cards (rating, review count, price). Focus on additional insights, recommendations, or context."""
 
 # ------------- Helpers -------------
 WORD_STRIP = re.compile(r"[^a-z0-9\s'-]+")
@@ -430,5 +431,5 @@ Additional guidelines:
         llm_block = f"\n\n💡 _Enhanced insights unavailable: {str(e)}_"
 
 final = answer + llm_block
-st.markdown(f"<div class='bubble bubble-assist'>{final}</div>", unsafe_allow_html=True)
+st.markdown(final, unsafe_allow_html=True)
 st.session_state.history.append(("assistant", final))
