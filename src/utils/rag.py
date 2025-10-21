@@ -199,26 +199,42 @@ class Retriever:
                     for variation in brand_mappings[brand_key]:
                         exact_match = exact_match | df["name"].str.lower().str.contains(variation, case=False, na=False)
             
-            # Category-based scoring for cuisine types
+            # Enhanced category-based scoring for cuisine types
             category_score = pd.Series(0, index=df.index)
             cuisine_keywords = {
-                'indian': ['indian', 'curry', 'biryani', 'tandoori'],
-                'chinese': ['chinese', 'dim sum', 'szechuan', 'cantonese'],
-                'mexican': ['mexican', 'taco', 'burrito', 'enchilada'],
-                'italian': ['italian', 'pasta', 'pizza', 'trattoria'],
-                'pizza': ['pizza', 'pizzeria', 'slice'],
-                'bbq': ['bbq', 'barbecue', 'smokehouse'],
-                'thai': ['thai', 'pad thai', 'tom yum'],
-                'japanese': ['japanese', 'sushi', 'ramen', 'tempura'],
-                'korean': ['korean', 'bibimbap', 'kimchi'],
-                'vietnamese': ['vietnamese', 'pho', 'banh mi']
+                'indian': ['indian', 'curry', 'biryani', 'tandoori', 'indian restaurant', 'indian food'],
+                'chinese': ['chinese', 'dim sum', 'szechuan', 'cantonese', 'chinese restaurant', 'chinese food'],
+                'mexican': ['mexican', 'taco', 'burrito', 'enchilada', 'mexican restaurant', 'mexican food'],
+                'italian': ['italian', 'pasta', 'pizza', 'trattoria', 'italian restaurant', 'italian food'],
+                'pizza': ['pizza', 'pizzeria', 'slice', 'pizza restaurant'],
+                'bbq': ['bbq', 'barbecue', 'smokehouse', 'bbq restaurant'],
+                'thai': ['thai', 'pad thai', 'tom yum', 'thai restaurant', 'thai food'],
+                'japanese': ['japanese', 'sushi', 'ramen', 'tempura', 'japanese restaurant', 'japanese food'],
+                'korean': ['korean', 'bibimbap', 'kimchi', 'korean restaurant', 'korean food'],
+                'vietnamese': ['vietnamese', 'pho', 'banh mi', 'vietnamese restaurant', 'vietnamese food'],
+                'american': ['american', 'burgers', 'american restaurant', 'american food'],
+                'seafood': ['seafood', 'fish', 'seafood restaurant'],
+                'steak': ['steak', 'steakhouse', 'steak restaurant'],
+                'coffee': ['coffee', 'coffee shop', 'cafe', 'coffee house'],
+                'fast food': ['fast food', 'fastfood', 'quick service'],
+                'breakfast': ['breakfast', 'brunch', 'breakfast restaurant'],
+                'dessert': ['dessert', 'desserts', 'ice cream', 'bakery']
             }
             
+            # Check for cuisine matches and apply strong scoring
+            cuisine_match_found = False
             for cuisine, keywords in cuisine_keywords.items():
                 if any(kw in qn for kw in keywords):
+                    cuisine_match_found = True
+                    # Apply strong category scoring (multiply by 5 for cuisine-specific queries)
                     for keyword in keywords:
-                        category_score += df["categories"].str.lower().fillna("").str.count(keyword)
+                        category_score += df["categories"].str.lower().fillna("").str.count(keyword) * 5
                     break
+            
+            # If no specific cuisine found, apply general category scoring
+            if not cuisine_match_found:
+                for keyword in toks:
+                    category_score += df["categories"].str.lower().fillna("").str.count(keyword)
             
             # Partial name matches
             pat = re.compile("|".join(map(re.escape, toks)))
@@ -235,6 +251,27 @@ class Retriever:
         df = df.assign(_score=score).sort_values(
             ["_score","rating","review_count"], ascending=[False,False,False]
         )
+        
+        # If we have cuisine-specific results, prioritize them heavily
+        if cuisine_match_found:
+            # Separate cuisine matches from non-matches
+            cuisine_matches = df[df["_score"] > 0]
+            non_cuisine_matches = df[df["_score"] == 0]
+            
+            # Return cuisine matches first, then others
+            if len(cuisine_matches) > 0:
+                # If we have enough cuisine matches, return only those
+                if len(cuisine_matches) >= k:
+                    return cuisine_matches.head(k)[REQUIRED_COLS].to_dict(orient="records")
+                else:
+                    # Return cuisine matches + some others
+                    remaining_slots = k - len(cuisine_matches)
+                    result_df = pd.concat([
+                        cuisine_matches,
+                        non_cuisine_matches.head(remaining_slots)
+                    ])
+                    return result_df[REQUIRED_COLS].to_dict(orient="records")
+        
         return df.head(int(max(1,k)))[REQUIRED_COLS].to_dict(orient="records")
 
 # ============== FAISS Review RAG (passage retrieval) ==============

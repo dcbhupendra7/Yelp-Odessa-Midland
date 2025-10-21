@@ -59,11 +59,14 @@ with col2:
         st.rerun()
 
 SYSTEM_PROMPT = """You are an intelligent restaurant assistant specialized in Odessa & Midland.
-Use ONLY the supplied candidates and/or the numbered review context. If the answer isn’t in the context, say so briefly.
-- “Best/Top” → highest rated; “Worst” → lowest rated; “Average” → compute average rating/price/review count.
+Use ONLY the supplied candidates and/or the numbered review context. If the answer isn't in the context, say so briefly.
+- "Best/Top" → highest rated; "Worst" → lowest rated; "Average" → compute average rating/price/review count.
 - Interpret $..$$$$ via price column. Filter by city words (Odessa, Midland).
 - Do not invent restaurant names. Prefer items with higher review_count.
-- Cite passages with [1], [2] etc. when you use the review context."""
+- Cite passages with [1], [2] etc. when you use the review context.
+- Be accurate about the data you see - if a restaurant shows "26 reviews", don't say it has "no review count data".
+- If there are very few restaurants of a specific cuisine type, mention this limitation.
+- Focus on the actual restaurants provided in the candidates list."""
 
 # ------------- Helpers -------------
 WORD_STRIP = re.compile(r"[^a-z0-9\s'-]+")
@@ -268,31 +271,43 @@ if not df.empty:
     elif kind == "few_reviews": 
         df = df.sort_values(["review_count","rating"], ascending=[True, False])
 
-# bullets for UI
-def bullets(frame: pd.DataFrame, limit: int) -> str:
-    if frame is None or frame.empty:
-        return "I couldn't load local rows yet."
-    
-    out = []
-    for i, (_, r) in enumerate(frame.head(limit).iterrows(), 1):
-        name = html.escape(str(r.get("name","Unknown")))
-        url  = html.escape(str(r.get("url","#")) or "#")
-        rating = float(r.get("rating",0.0))
-        rc = int(r.get("review_count",0))
-        price = r.get("price") or "N/A"
-        city = html.escape(str(r.get("city","")))
-        addr = html.escape(str(r.get("address","")))
-        categories = html.escape(str(r.get("categories","")))
+    # bullets for UI
+    def bullets(frame: pd.DataFrame, limit: int) -> str:
+        if frame is None or frame.empty:
+            return "I couldn't load local rows yet."
         
-        # Clean up categories display
-        cat_display = ""
-        if categories and categories != "nan" and len(categories) < 60:
-            # Limit categories to first 2-3 items for readability
-            cat_list = categories.split(", ")[:2]
-            cat_display = f"<br><small style='color: #9aa4af;'>🍽️ {', '.join(cat_list)}</small>"
+        # Check if this is a cuisine-specific query with limited results
+        cuisine_keywords = ['indian', 'chinese', 'mexican', 'italian', 'thai', 'japanese', 'korean', 'vietnamese']
+        is_cuisine_query = any(cuisine in q.lower() for cuisine in cuisine_keywords)
         
-        # Create organized restaurant card
-        restaurant_card = f"""
+        out = []
+        
+        # Add special message for limited cuisine results
+        if is_cuisine_query and len(frame) <= 3:
+            cuisine_type = next((cuisine for cuisine in cuisine_keywords if cuisine in q.lower()), 'this cuisine')
+            out.append(f"<div style='margin: 12px 0; padding: 12px; border: 1px solid #f0a020; border-radius: 8px; background: #2d1b00; color: #f0a020;'>")
+            out.append(f"<strong>📝 Note:</strong> There are only {len(frame)} {cuisine_type} restaurants in our Odessa/Midland database. ")
+            out.append(f"Here are all available options:</div>")
+        
+        for i, (_, r) in enumerate(frame.head(limit).iterrows(), 1):
+            name = html.escape(str(r.get("name","Unknown")))
+            url  = html.escape(str(r.get("url","#")) or "#")
+            rating = float(r.get("rating",0.0))
+            rc = int(r.get("review_count",0))
+            price = r.get("price") or "N/A"
+            city = html.escape(str(r.get("city","")))
+            addr = html.escape(str(r.get("address","")))
+            categories = html.escape(str(r.get("categories","")))
+            
+            # Clean up categories display
+            cat_display = ""
+            if categories and categories != "nan" and len(categories) < 60:
+                # Limit categories to first 2-3 items for readability
+                cat_list = categories.split(", ")[:2]
+                cat_display = f"<br><small style='color: #9aa4af;'>🍽️ {', '.join(cat_list)}</small>"
+            
+            # Create organized restaurant card
+            restaurant_card = f"""
 <div style="margin: 12px 0; padding: 12px; border: 1px solid #454c54; border-radius: 8px; background: #21262d;">
     <div style="display: flex; justify-content: space-between; align-items: start;">
         <div style="flex: 1;">
@@ -309,7 +324,7 @@ def bullets(frame: pd.DataFrame, limit: int) -> str:
         </div>
     </div>
 </div>"""
-        out.append(restaurant_card)
+            out.append(restaurant_card)
     
     return "".join(out)
 
