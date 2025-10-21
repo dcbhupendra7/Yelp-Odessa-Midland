@@ -150,7 +150,7 @@ def flatten(raw_rows: List[Dict[str, Any]]) -> pd.DataFrame:
     keep = [
         "id","name","rating","review_count","price","categories",
         "location.address1","location.city","location.state","location.zip_code",
-        "coordinates.latitude","coordinates.longitude","url"
+        "coordinates.latitude","coordinates.longitude","url","business_hours"
     ]
     df = df[[c for c in keep if c in df.columns]].copy()
     df.rename(columns={
@@ -164,10 +164,55 @@ def flatten(raw_rows: List[Dict[str, Any]]) -> pd.DataFrame:
     df["categories"] = df["categories"].apply(
         lambda x: ", ".join([c["title"] for c in x]) if isinstance(x, list) else (x or "")
     )
+    
+    # Process business hours into readable format
+    df["hours"] = df["business_hours"].apply(format_hours)
+    df.drop("business_hours", axis=1, inplace=True)
+    
     # Coerce numerics
     for col in ["rating","review_count","latitude","longitude"]:
         df[col] = pd.to_numeric(df[col], errors="coerce")
     return df
+
+
+def format_hours(hours_data):
+    """Convert Yelp hours data to readable format."""
+    if not hours_data or not isinstance(hours_data, list) or len(hours_data) == 0:
+        return "Hours not available"
+    
+    # Get the first hours entry (usually there's only one)
+    hours_entry = hours_data[0]
+    if not hours_entry.get("open"):
+        return "Hours not available"
+    
+    days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+    formatted_hours = []
+    
+    # Group hours by day
+    day_hours = {}
+    for time_slot in hours_entry["open"]:
+        day = time_slot["day"]
+        start = time_slot["start"]
+        end = time_slot["end"]
+        
+        # Convert HHMM to readable time
+        start_time = f"{start[:2]}:{start[2:]}"
+        end_time = f"{end[:2]}:{end[2:]}"
+        
+        if day not in day_hours:
+            day_hours[day] = []
+        day_hours[day].append(f"{start_time}-{end_time}")
+    
+    # Format each day
+    for day_num in range(7):
+        if day_num in day_hours:
+            day_name = days[day_num]
+            hours_str = ", ".join(day_hours[day_num])
+            formatted_hours.append(f"{day_name}: {hours_str}")
+        else:
+            formatted_hours.append(f"{days[day_num]}: Closed")
+    
+    return " | ".join(formatted_hours)
 
 
 def flush_to_csv(parts: List[pd.DataFrame]) -> None:

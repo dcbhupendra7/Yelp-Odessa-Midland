@@ -332,6 +332,20 @@ if not df.empty:
                 cat_list = categories.split(", ")[:2]
                 cat_display = f"<br><small style='color: #9aa4af;'>🍽️ {', '.join(cat_list)}</small>"
             
+            # Handle hours display
+            hours_raw = r.get("hours", "")
+            if pd.isna(hours_raw) or str(hours_raw).lower() in ["nan", "none", "", "hours not available"] or str(hours_raw).strip() == "":
+                hours_display = ""
+            else:
+                hours = str(hours_raw)
+                # Show only current day's hours for brevity, or first few days
+                hours_lines = hours.split(" | ")
+                if len(hours_lines) > 3:
+                    hours_preview = " | ".join(hours_lines[:2]) + " | ..."
+                else:
+                    hours_preview = hours
+                hours_display = f"<br><small style='color: #9aa4af;'>🕒 {hours_preview}</small>"
+            
             # Create organized restaurant card
             restaurant_card = f"""
 <div style="margin: 12px 0; padding: 12px; border: 1px solid #454c54; border-radius: 8px; background: #21262d;">
@@ -347,6 +361,7 @@ if not df.empty:
                 📍 {city} • {addr}
             </div>
             {cat_display}
+            {hours_display}
         </div>
     </div>
 </div>"""

@@ -50,7 +50,7 @@ DOCSTORE_PATH = _first_existing([
 
 EMBED_MODEL = os.getenv("EMBED_MODEL", "sentence-transformers/all-MiniLM-L6-v2")
 
-REQUIRED_COLS = ["name","url","rating","review_count","city","address","categories","price","latitude","longitude","id"]
+REQUIRED_COLS = ["name","url","rating","review_count","city","address","categories","price","latitude","longitude","id","hours"]
 _WORD_STRIP = re.compile(r"[^a-z0-9\s'-]+")
 
 def _ensure_columns(df: pd.DataFrame) -> pd.DataFrame:
