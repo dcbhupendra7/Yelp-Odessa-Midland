@@ -1,5 +1,4 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
+
 """
 utils/rag.py
 - Loads your businesses table (default: data/processed/rag/businesses_clean.csv)
@@ -50,7 +49,7 @@ DOCSTORE_PATH = _first_existing([
 
 EMBED_MODEL = os.getenv("EMBED_MODEL", "sentence-transformers/all-MiniLM-L6-v2")
 
-REQUIRED_COLS = ["name","url","rating","review_count","city","address","categories","price","latitude","longitude","id"]
+REQUIRED_COLS = ["name","url","rating","review_count","city","address","categories","price","latitude","longitude","id","hours"]
 _WORD_STRIP = re.compile(r"[^a-z0-9\s'-]+")
 
 def _ensure_columns(df: pd.DataFrame) -> pd.DataFrame:
@@ -120,6 +119,94 @@ class Retriever:
         df = self.docs
         if df.empty: return []
 
+        # FIRST: Check if this is a cuisine-type query (skip exact name search for these)
+        qn = _norm(query)
+        import re
+        
+        # List of cuisine keywords that indicate a cuisine-type query
+        cuisine_query_keywords = ['indian', 'chinese', 'mexican', 'italian', 'thai', 'japanese', 'korean', 'vietnamese', 
+                                   'american', 'seafood', 'pizza', 'bbq', 'steak', 'sushi', 'burger', 'taco', 'coffee',
+                                   'breakfast', 'brunch', 'dessert', 'bakery', 'ice cream']
+        
+        is_cuisine_query = any(cuisine_kw in qn for cuisine_kw in cuisine_query_keywords)
+        
+        # SECOND: Try exact name search on the entire database (bypass all filters) - but skip for cuisine queries
+        if len(qn) >= 3 and not is_cuisine_query:  # Skip exact name search for cuisine queries
+            query_lower = qn.lower()
+            
+            # Extract potential restaurant names from the query
+            # Look for common restaurant name patterns
+            restaurant_name_patterns = []
+            
+            # Pattern 1: "restaurant name" + city
+            city_pattern = r'(.*?)\s+(?:in|at|near)\s+(?:odessa|midland)'
+            city_match = re.search(city_pattern, query_lower)
+            if city_match:
+                restaurant_name_patterns.append(city_match.group(1).strip())
+            
+            # Pattern 2: "is restaurant name open"
+            open_pattern = r'(?:is|are)\s+(.*?)\s+(?:open|closed)'
+            open_match = re.search(open_pattern, query_lower)
+            if open_match:
+                restaurant_name_patterns.append(open_match.group(1).strip())
+            
+            # Pattern 3: "restaurant name" + "open now"
+            now_pattern = r'(.*?)\s+(?:open|closed)\s+(?:now|today)'
+            now_match = re.search(now_pattern, query_lower)
+            if now_match:
+                restaurant_name_patterns.append(now_match.group(1).strip())
+            
+            # Pattern 4: "what is the rating of restaurant name"
+            rating_pattern = r'(?:what is the rating of|rating of)\s+(.*?)(?:\?|$)'
+            rating_match = re.search(rating_pattern, query_lower)
+            if rating_match:
+                restaurant_name_patterns.append(rating_match.group(1).strip())
+            
+            # Pattern 5: "hours for restaurant name"
+            hours_pattern = r'(?:hours for|hours of)\s+(.*?)(?:\?|$)'
+            hours_match = re.search(hours_pattern, query_lower)
+            if hours_match:
+                restaurant_name_patterns.append(hours_match.group(1).strip())
+            
+            # Add the original query as a fallback
+            restaurant_name_patterns.append(query_lower)
+            
+            # Try each pattern to find exact matches
+            for pattern in restaurant_name_patterns:
+                if len(pattern) >= 3:  # Only for patterns with 3+ characters
+                    # Create variations of the pattern to handle common naming variations
+                    pattern_variations = [pattern]
+                    
+                    # Handle common variations
+                    if 'mc donald' in pattern:
+                        pattern_variations.extend(['mcdonald', 'mcdonald\'s', 'mcdonalds'])
+                    elif 'mcdonald' in pattern:
+                        pattern_variations.extend(['mc donald', 'mcdonald\'s', 'mcdonalds'])
+                    elif 'domino' in pattern:
+                        pattern_variations.extend(['domino\'s', 'dominos'])
+                    elif 'pizza hut' in pattern:
+                        pattern_variations.extend(['pizzahut'])
+                    elif 'taco bell' in pattern:
+                        pattern_variations.extend(['tacobell'])
+                    elif 'burger king' in pattern:
+                        pattern_variations.extend(['burgerking'])
+                    elif 'chick fil a' in pattern or 'chik fil a' in pattern:
+                        pattern_variations.extend(['chick-fil-a', 'chik-fil-a', 'chickfila', 'chikfila'])
+                    
+                    # Try each variation
+                    for variation in pattern_variations:
+                        # Look for restaurants that contain the variation as a substring
+                        exact_matches = self.docs[self.docs["name"].str.lower().str.contains(variation, case=False, na=False)]
+                        
+                        if not exact_matches.empty:
+                            # Sort by start match first, then by rating
+                            exact_matches = exact_matches.assign(
+                                _start_match=exact_matches["name"].str.lower().str.startswith(variation, na=False)
+                            ).sort_values(["_start_match", "rating", "review_count"], ascending=[False, False, False])
+                            
+                            return exact_matches.head(k)[REQUIRED_COLS].to_dict(orient="records")
+
+        # SECOND: Apply filters and do regular search
         min_stars = float(filters.get("min_stars", 0.0))
         df = df[df["rating"] >= min_stars]
 
@@ -131,7 +218,6 @@ class Retriever:
             df = df[df["price"].isin(filters["price"])]
 
         # Enhanced scoring: prioritize exact name matches, then partial matches
-        qn = _norm(query)
         toks = [t for t in qn.split() if len(t) >= 2]
         
         if toks:
@@ -153,6 +239,8 @@ class Retriever:
                 'popeyes': ['popeyes', 'popeyes louisiana kitchen'],
                 'little caesar': ['little caesar\'s', 'little caesars', 'little caesar'],
                 'panda express': ['panda express', 'panda'],
+                'pista express': ['pista express', 'pista'],
+                'taste of india': ['taste of india', 'taste of india-permian basin'],
                 'chipotle': ['chipotle', 'chipotle mexican grill'],
                 'five guys': ['five guys'],
                 'sonic': ['sonic', 'sonic drive-in'],
@@ -199,26 +287,42 @@ class Retriever:
                     for variation in brand_mappings[brand_key]:
                         exact_match = exact_match | df["name"].str.lower().str.contains(variation, case=False, na=False)
             
-            # Category-based scoring for cuisine types
+            # Enhanced category-based scoring for cuisine types
             category_score = pd.Series(0, index=df.index)
             cuisine_keywords = {
-                'indian': ['indian', 'curry', 'biryani', 'tandoori'],
-                'chinese': ['chinese', 'dim sum', 'szechuan', 'cantonese'],
-                'mexican': ['mexican', 'taco', 'burrito', 'enchilada'],
-                'italian': ['italian', 'pasta', 'pizza', 'trattoria'],
-                'pizza': ['pizza', 'pizzeria', 'slice'],
-                'bbq': ['bbq', 'barbecue', 'smokehouse'],
-                'thai': ['thai', 'pad thai', 'tom yum'],
-                'japanese': ['japanese', 'sushi', 'ramen', 'tempura'],
-                'korean': ['korean', 'bibimbap', 'kimchi'],
-                'vietnamese': ['vietnamese', 'pho', 'banh mi']
+                'indian': ['indian', 'curry', 'biryani', 'tandoori', 'indian restaurant', 'indian food'],
+                'chinese': ['chinese', 'dim sum', 'szechuan', 'cantonese', 'chinese restaurant', 'chinese food'],
+                'mexican': ['mexican', 'taco', 'burrito', 'enchilada', 'mexican restaurant', 'mexican food'],
+                'italian': ['italian', 'pasta', 'pizza', 'trattoria', 'italian restaurant', 'italian food'],
+                'pizza': ['pizza', 'pizzeria', 'slice', 'pizza restaurant'],
+                'bbq': ['bbq', 'barbecue', 'smokehouse', 'bbq restaurant'],
+                'thai': ['thai', 'pad thai', 'tom yum', 'thai restaurant', 'thai food'],
+                'japanese': ['japanese', 'sushi', 'ramen', 'tempura', 'japanese restaurant', 'japanese food'],
+                'korean': ['korean', 'bibimbap', 'kimchi', 'korean restaurant', 'korean food'],
+                'vietnamese': ['vietnamese', 'pho', 'banh mi', 'vietnamese restaurant', 'vietnamese food'],
+                'american': ['american', 'burgers', 'american restaurant', 'american food'],
+                'seafood': ['seafood', 'fish', 'seafood restaurant'],
+                'steak': ['steak', 'steakhouse', 'steak restaurant'],
+                'coffee': ['coffee', 'coffee shop', 'cafe', 'coffee house'],
+                'fast food': ['fast food', 'fastfood', 'quick service'],
+                'breakfast': ['breakfast', 'brunch', 'breakfast restaurant'],
+                'dessert': ['dessert', 'desserts', 'ice cream', 'bakery']
             }
             
+            # Check for cuisine matches and apply strong scoring
+            cuisine_match_found = False
             for cuisine, keywords in cuisine_keywords.items():
                 if any(kw in qn for kw in keywords):
+                    cuisine_match_found = True
+                    # Apply very strong category scoring (multiply by 20 for cuisine-specific queries)
                     for keyword in keywords:
-                        category_score += df["categories"].str.lower().fillna("").str.count(keyword)
+                        category_score += df["categories"].str.lower().fillna("").str.count(keyword) * 20
                     break
+            
+            # If no specific cuisine found, apply general category scoring
+            if not cuisine_match_found:
+                for keyword in toks:
+                    category_score += df["categories"].str.lower().fillna("").str.count(keyword)
             
             # Partial name matches
             pat = re.compile("|".join(map(re.escape, toks)))
@@ -235,6 +339,50 @@ class Retriever:
         df = df.assign(_score=score).sort_values(
             ["_score","rating","review_count"], ascending=[False,False,False]
         )
+        
+        # Fallback: if no results found, try exact name search
+        if len(df) == 0:
+            # Try to find restaurants with exact name matches
+            exact_name_search = self.docs[self.docs["name"].str.lower().str.contains(qn, case=False, na=False)]
+            if not exact_name_search.empty:
+                return exact_name_search.head(k)[REQUIRED_COLS].to_dict(orient="records")
+        
+        # Additional fallback: if we have results but none match the query, try exact name search
+        if len(df) > 0:
+            # Check if any results actually match the query
+            query_matches = df[df["name"].str.lower().str.contains(qn, case=False, na=False)]
+            if len(query_matches) == 0:
+                # Try exact name search on the entire database
+                exact_name_search = self.docs[self.docs["name"].str.lower().str.contains(qn, case=False, na=False)]
+                if not exact_name_search.empty:
+                    return exact_name_search.head(k)[REQUIRED_COLS].to_dict(orient="records")
+        
+        # Check for specific restaurant queries - if exact match found, return only that restaurant
+        if exact_match.any():
+            exact_matches = df[exact_match.values]
+            if len(exact_matches) > 0:
+                # For specific restaurant queries, return only the exact matches
+                return exact_matches.head(k)[REQUIRED_COLS].to_dict(orient="records")
+        
+        # If we have cuisine-specific results, prioritize them heavily
+        if cuisine_match_found:
+            # Find the detected cuisine type
+            detected_cuisine = None
+            for cuisine, keywords in cuisine_keywords.items():
+                if any(kw in qn for kw in keywords):
+                    detected_cuisine = cuisine
+                    break
+            
+            if detected_cuisine:
+                # For cuisine queries, do a direct category search on the entire database
+                cuisine_matches = self.docs[self.docs["categories"].str.lower().str.contains(detected_cuisine, case=False, na=False)]
+                
+                if len(cuisine_matches) > 0:
+                    # Sort by rating and review count
+                    cuisine_matches = cuisine_matches.sort_values(["rating", "review_count"], ascending=[False, False])
+                    return cuisine_matches.head(k)[REQUIRED_COLS].to_dict(orient="records")
+        
+        # If no cuisine-specific results, return regular search results
         return df.head(int(max(1,k)))[REQUIRED_COLS].to_dict(orient="records")
 
 # ============== FAISS Review RAG (passage retrieval) ==============
@@ -299,6 +447,7 @@ def build_prompt(question: str, hits: List[Dict]) -> str:
         return f"Question: {question}\n\nNo candidates."
     lines = []
     for h in hits:
+        hours_info = h.get('hours', 'Hours not available')
         lines.append(f"- **{h.get('name','?')}** (⭐{float(h.get('rating',0.0)):.1f} • {h.get('price','N/A')}) — "
-                     f"{h.get('categories','')} — {h.get('city','')}")
+                     f"{h.get('categories','')} — {h.get('city','')} — Hours: {hours_info}")
     return f"Question: {question}\n\nCandidates:\n" + "\n".join(lines)

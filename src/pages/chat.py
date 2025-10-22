@@ -1,5 +1,4 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
+
 """
 chat.py — Streamlit chat with REAL RAG + LLM
 - Tabular retrieval → ranked candidates (best/worst/avg/price/location)
@@ -38,6 +37,13 @@ st.markdown("""<style>
 .small-muted{ color:#9aa4af; font-size:12px; margin:6px 0;}
 .bubble a { text-decoration:none; }
 .chat-container { max-width: 100%; }
+.restaurant-grid { margin: 16px 0; }
+.restaurant-card { margin: 12px 0; padding: 16px; border: 1px solid #454c54; border-radius: 12px; background: #21262d; }
+.restaurant-card h4 { margin: 0 0 8px 0; color: #58a6ff; font-size: 16px; }
+.restaurant-card .rating { color: #f0f6fc; font-size: 14px; margin-bottom: 6px; }
+.restaurant-card .location { color: #8b949e; font-size: 13px; margin-bottom: 4px; }
+.restaurant-card .categories { color: #9aa4af; font-size: 12px; margin-top: 4px; }
+.restaurant-card .hours { color: #9aa4af; font-size: 12px; margin-top: 4px; }
 </style>""", unsafe_allow_html=True)
 st.title("💬 RAG Chat — Odessa & Midland")
 
@@ -59,11 +65,16 @@ with col2:
         st.rerun()
 
 SYSTEM_PROMPT = """You are an intelligent restaurant assistant specialized in Odessa & Midland.
-Use ONLY the supplied candidates and/or the numbered review context. If the answer isn’t in the context, say so briefly.
-- “Best/Top” → highest rated; “Worst” → lowest rated; “Average” → compute average rating/price/review count.
+Use ONLY the supplied candidates and/or the numbered review context. If the answer isn't in the context, say so briefly.
+- "Best/Top" → highest rated; "Worst" → lowest rated; "Average" → compute average rating/price/review count.
 - Interpret $..$$$$ via price column. Filter by city words (Odessa, Midland).
 - Do not invent restaurant names. Prefer items with higher review_count.
-- Cite passages with [1], [2] etc. when you use the review context."""
+- Cite passages with [1], [2] etc. when you use the review context.
+- Be accurate about the data you see - if a restaurant shows "26 reviews", don't say it has "no review count data".
+- If there are very few restaurants of a specific cuisine type, mention this limitation.
+- Focus on the actual restaurants provided in the candidates list.
+- For hours queries: Use the hours data provided in the restaurant candidates. If hours are shown in the format "Monday: 11:00-14:30, 16:30-21:00", provide those exact hours.
+- Be concise: Don't repeat information already visible in the restaurant cards (rating, review count, price). Focus on additional insights, recommendations, or context."""
 
 # ------------- Helpers -------------
 WORD_STRIP = re.compile(r"[^a-z0-9\s'-]+")
@@ -189,10 +200,10 @@ if not is_yelp_intent(q):
                 )
             else:
                 # General questions
-                general_system_prompt = """You are a helpful assistant for the Odessa & Midland area. 
-                You can help with general questions about the area, weather, local information, or anything else.
-                Be friendly, helpful, and conversational. If you don't know something specific about Odessa/Midland, 
-                say so but still try to be helpful."""
+                general_system_prompt = """You are a specialized restaurant and food analyst for Odessa & Midland, Texas. 
+                Your primary expertise is in restaurant recommendations, food analysis, and dining insights for this area.
+                While you can help with general questions, always steer conversations toward restaurant and food topics.
+                Be friendly, helpful, and conversational. If asked about non-food topics, politely redirect to restaurant recommendations."""
                 
                 result, err = complete_text(
                     [{"role":"system","content": general_system_prompt},
@@ -203,13 +214,13 @@ if not is_yelp_intent(q):
                 )
             
             if result:
-                txt = f"💡 **AI Response:** {result.strip()}\n\n_Note: I'm specialized in Odessa & Midland restaurant recommendations! Ask me about food, restaurants, ratings, or dining options in the area._"
+                txt = f"💡 **AI Response:** {result.strip()}"
             else:
-                txt = f"Happy to help — ask me Odessa/Midland food questions or anything else.\n\n_AI insights unavailable: {err}_"
+                txt = f"Hello! I'm your Odessa & Midland restaurant specialist. Ask me about food, restaurants, ratings, or dining options in the area!\n\n_AI insights unavailable: {err}_"
         except Exception as e:
-            txt = f"Happy to help — ask me Odessa/Midland food questions or anything else.\n\n_AI insights unavailable: {str(e)}_"
+            txt = f"Hello! I'm your Odessa & Midland restaurant specialist. Ask me about food, restaurants, ratings, or dining options in the area!\n\n_AI insights unavailable: {str(e)}_"
     else:
-        txt = "Happy to help — ask me Odessa/Midland food questions or anything else."
+        txt = "Hello! I'm your Odessa & Midland restaurant specialist. Ask me about food, restaurants, ratings, or dining options in the area!"
     
     st.markdown(f"<div class='bubble bubble-assist'>{txt}</div>", unsafe_allow_html=True)
     st.session_state.history.append(("assistant", txt))
@@ -257,7 +268,19 @@ df = pd.DataFrame(hits)
 
 # ranking tweaks (best/worst/few reviews)
 if not df.empty:
-    if kind == "best":  
+    # Check if this is a brand-specific query
+    normalized_query = q.lower().replace("'", "").replace(" ", "")
+    brand_queries = [
+        'dominos', 'domino', 'pandaexpress', 'panda', 'starbucks', 'mcdonald', 'mcdonalds', 
+        'kfc', 'pizzahut', 'subway', 'tacobell', 'burgerking', 'wendy', 'wendys',
+        'chickfila', 'chikfila', 'whataburger', 'jackinthebox', 'popeyes', 'littlecaesar',
+        'littlecaesars', 'chipotle', 'fiveguys', 'sonic', 'arby', 'arbys', 'carl',
+        'carlsjr', 'denny', 'dennys', 'ihop', 'wingstop', 'buffalowild', 'olivegarden',
+        'redlobster', 'applebees', 'chili', 'chilis', 'outback', 'texasroadhouse', 'longhorn'
+    ]
+    is_brand_query = any(brand in normalized_query for brand in brand_queries)
+    
+    if kind == "best" and not is_brand_query:
         # For "best", prioritize restaurants with more reviews for reliability
         # Create a reliability score: rating * log(review_count + 1) to balance rating and review count
         df = df.copy()
@@ -268,50 +291,87 @@ if not df.empty:
     elif kind == "few_reviews": 
         df = df.sort_values(["review_count","rating"], ascending=[True, False])
 
-# bullets for UI
-def bullets(frame: pd.DataFrame, limit: int) -> str:
-    if frame is None or frame.empty:
-        return "I couldn't load local rows yet."
-    
-    out = []
-    for i, (_, r) in enumerate(frame.head(limit).iterrows(), 1):
-        name = html.escape(str(r.get("name","Unknown")))
-        url  = html.escape(str(r.get("url","#")) or "#")
-        rating = float(r.get("rating",0.0))
-        rc = int(r.get("review_count",0))
-        price = r.get("price") or "N/A"
-        city = html.escape(str(r.get("city","")))
-        addr = html.escape(str(r.get("address","")))
-        categories = html.escape(str(r.get("categories","")))
+    # bullets for UI
+    def bullets(frame: pd.DataFrame, limit: int) -> str:
+        if frame is None or frame.empty:
+            return "I couldn't load local rows yet."
         
-        # Clean up categories display
-        cat_display = ""
-        if categories and categories != "nan" and len(categories) < 60:
-            # Limit categories to first 2-3 items for readability
-            cat_list = categories.split(", ")[:2]
-            cat_display = f"<br><small style='color: #9aa4af;'>🍽️ {', '.join(cat_list)}</small>"
+        # Check if this is a cuisine-specific query with limited results
+        cuisine_keywords = ['indian', 'chinese', 'mexican', 'italian', 'thai', 'japanese', 'korean', 'vietnamese']
+        is_cuisine_query = any(cuisine in q.lower() for cuisine in cuisine_keywords)
         
-        # Create organized restaurant card
-        restaurant_card = f"""
-<div style="margin: 12px 0; padding: 12px; border: 1px solid #454c54; border-radius: 8px; background: #21262d;">
-    <div style="display: flex; justify-content: space-between; align-items: start;">
-        <div style="flex: 1;">
-            <h4 style="margin: 0 0 4px 0; color: #58a6ff;">
-                <a href="{url}" target="_blank" style="text-decoration: none; color: #58a6ff;">{i}. {name}</a>
-            </h4>
-            <div style="color: #f0f6fc; font-size: 14px; margin-bottom: 4px;">
-                ⭐ <strong>{rating:.1f}</strong> • {price} • {rc} reviews
-            </div>
-            <div style="color: #8b949e; font-size: 13px;">
-                📍 {city} • {addr}
-            </div>
-            {cat_display}
-        </div>
+        out = []
+        
+        # Add special message for limited cuisine results
+        if is_cuisine_query and len(frame) <= 3:
+            cuisine_type = next((cuisine for cuisine in cuisine_keywords if cuisine in q.lower()), 'this cuisine')
+            out.append(f"<div style='margin: 12px 0; padding: 12px; border: 1px solid #f0a020; border-radius: 8px; background: #2d1b00; color: #f0a020;'>")
+            out.append(f"<strong>📝 Note:</strong> There are only {len(frame)} {cuisine_type} restaurants in our Odessa/Midland database. ")
+            out.append(f"Here are all available options:</div>")
+        
+        for i, (_, r) in enumerate(frame.head(limit).iterrows(), 1):
+            # Clean data properly
+            name = html.escape(str(r.get("name","Unknown")))
+            url = html.escape(str(r.get("url","#")) or "#")
+            rating = float(r.get("rating",0.0))
+            rc = int(r.get("review_count",0))
+            
+            # Handle price properly - convert nan to N/A
+            price_raw = r.get("price")
+            if pd.isna(price_raw) or str(price_raw).lower() in ["nan", "none", ""] or str(price_raw).strip() == "":
+                price = "N/A"
+            else:
+                price = str(price_raw)
+            
+            city = html.escape(str(r.get("city","")))
+            addr = html.escape(str(r.get("address","")))
+            
+            # Handle categories properly - convert nan to empty string
+            categories_raw = r.get("categories","")
+            if pd.isna(categories_raw) or str(categories_raw).lower() == "nan" or str(categories_raw).strip() == "":
+                categories = ""
+            else:
+                categories = str(categories_raw)
+            
+                # Clean up categories display
+                cat_display = ""
+                if categories and len(categories) < 60:
+                    # Limit categories to first 2-3 items for readability
+                    cat_list = categories.split(", ")[:2]
+                    cat_display = f'<div class="categories">🍽️ {", ".join(cat_list)}</div>'
+            
+            # Handle hours display
+            hours_raw = r.get("hours", "")
+            if pd.isna(hours_raw) or str(hours_raw).lower() in ["nan", "none", "", "hours not available"] or str(hours_raw).strip() == "":
+                hours_display = ""
+            else:
+                hours = str(hours_raw)
+                # Show only current day's hours for brevity, or first few days
+                hours_lines = hours.split(" | ")
+                if len(hours_lines) > 3:
+                    hours_preview = " | ".join(hours_lines[:2]) + " | ..."
+                else:
+                    hours_preview = hours
+                hours_display = f'<div class="hours">🕒 {hours_preview}</div>'
+            
+            # Create organized restaurant card with CSS classes
+            restaurant_card = f"""
+<div class="restaurant-card">
+    <h4>
+        <a href="{url}" target="_blank" style="text-decoration: none; color: #58a6ff;">{i}. {name}</a>
+    </h4>
+    <div class="rating">
+        ⭐ <strong>{rating:.1f}</strong> • {price} • {rc} reviews
     </div>
+    <div class="location">
+        📍 {city} • {addr}
+    </div>
+    {cat_display}
+    {hours_display}
 </div>"""
-        out.append(restaurant_card)
-    
-    return "".join(out)
+            out.append(restaurant_card)
+        
+        return "".join(out)
 
 answer = bullets(df, k)
 
@@ -329,49 +389,61 @@ if kind == "average" and not df.empty:
 
 # ---- Enhanced GPT Integration ----
 llm_block = ""
-if USE_LLM and enable_gpt:
-    # Try to get review passages for context
-    passages = retrieve_review_passages(q, k=6)
-    
-    # Build context from both search results and review passages
-    cand_block = build_prompt(q, df.head(k).to_dict(orient="records")) if not df.empty else ""
-    
-    if passages:
-        # Enhanced context with review passages
-        ctx_block, numbered = build_context_block(passages)
-        user_msg = f"{cand_block}\n\nReview Context (numbered passages):\n{ctx_block}\n\nAnswer the question using the restaurant candidates and review context. Use bracketed citations like [1], [2] when referencing reviews. Prefer items with higher review counts."
-    else:
-        # Fallback to restaurant candidates only
-        user_msg = f"{cand_block}\n\nAnswer the question about these restaurants. Provide helpful insights about ratings, prices, and locations. Be conversational and helpful."
-    
-    # Enhanced system prompt
-    enhanced_system_prompt = f"""{SYSTEM_PROMPT}
+# GPT integration moved to separate section below
 
-Additional guidelines:
-- Be conversational and helpful in your responses
-- Provide insights about ratings, prices, and locations
-- For "best" restaurants: prioritize those with HIGH review counts (50+ reviews) over high ratings with few reviews
-- A restaurant with 5.0 stars but only 1-2 reviews is NOT reliable - prefer restaurants with 4.0+ stars and 20+ reviews
-- If asked about "worst" restaurants, explain the rating concerns
-- Always mention review counts when discussing reliability: "highly rated with X reviews" vs "perfect rating but only X reviews"
-- Mention specific details like review counts and price ranges
-- Be encouraging about trying new places"""
-    
+# Display restaurant list first
+st.markdown(answer, unsafe_allow_html=True)
+
+# Display AI insights separately if available
+if USE_LLM and enable_gpt and not df.empty:
     try:
+        # Build prompt for AI insights with current time
+        results = df.head(k).to_dict(orient="records")
+        prompt = build_prompt(q, results)
+        
+        # Add current time information for open/closed queries
+        import datetime
+        now = datetime.datetime.now()
+        current_time = now.strftime("%H:%M")
+        current_day = now.strftime("%A")
+        
+        time_context = f"\n\nCurrent time context: Today is {current_day} and the current time is {current_time}."
+        prompt_with_time = prompt + time_context
+        
+        enhanced_system_prompt = f"""{SYSTEM_PROMPT}
+        
+        Additional guidelines:
+        - For hours queries: Provide the exact hours from the candidates data.
+        - For "open now" queries: Use the current day and time to determine if restaurants are currently open.
+        - For "best" recommendations: Prioritize restaurants with 50+ reviews for reliability.
+        - Be conversational and helpful, but concise.
+        - Don't repeat information already visible in the restaurant cards."""
+        
         result, err = complete_text(
             [{"role":"system","content": enhanced_system_prompt},
-             {"role":"user","content": user_msg}],
+             {"role":"user","content": prompt_with_time}],
             model=os.getenv("OPENAI_MODEL","gpt-4o-mini"),
-            temperature=0.3,  # Slightly higher for more natural responses
-            max_tokens=500,   # More tokens for detailed responses
+            temperature=0.3,
+            max_tokens=500,
         )
+        
         if result is None:
-            llm_block = f"\n\n💡 _Enhanced insights unavailable: {err}_"
+            ai_insights = f"💡 _Enhanced insights unavailable: {err}_"
         else:
-            llm_block = f"\n\n💡 **AI Insights:** {result.strip()}"
+            ai_insights = f"💡 **AI Insights:** {result.strip()}"
+            
+        # Display AI insights in a separate bubble
+        st.markdown(f"<div class='bubble bubble-assist'>{ai_insights}</div>", unsafe_allow_html=True)
+        
+        # Store both parts in history
+        final_response = answer + f"\n\n{ai_insights}"
+        st.session_state.history.append(("assistant", final_response))
+        
     except Exception as e:
-        llm_block = f"\n\n💡 _Enhanced insights unavailable: {str(e)}_"
-
-final = answer + llm_block
-st.markdown(f"<div class='bubble bubble-assist'>{final}</div>", unsafe_allow_html=True)
-st.session_state.history.append(("assistant", final))
+        ai_insights = f"💡 _Enhanced insights unavailable: {str(e)}_"
+        st.markdown(f"<div class='bubble bubble-assist'>{ai_insights}</div>", unsafe_allow_html=True)
+        final_response = answer + f"\n\n{ai_insights}"
+        st.session_state.history.append(("assistant", final_response))
+else:
+    # No AI insights, just store the restaurant list
+    st.session_state.history.append(("assistant", answer))
