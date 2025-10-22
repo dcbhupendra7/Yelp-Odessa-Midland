@@ -1,5 +1,4 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
+
 """
 chat.py — Streamlit chat with REAL RAG + LLM
 - Tabular retrieval → ranked candidates (best/worst/avg/price/location)
@@ -38,6 +37,13 @@ st.markdown("""<style>
 .small-muted{ color:#9aa4af; font-size:12px; margin:6px 0;}
 .bubble a { text-decoration:none; }
 .chat-container { max-width: 100%; }
+.restaurant-grid { margin: 16px 0; }
+.restaurant-card { margin: 12px 0; padding: 16px; border: 1px solid #454c54; border-radius: 12px; background: #21262d; }
+.restaurant-card h4 { margin: 0 0 8px 0; color: #58a6ff; font-size: 16px; }
+.restaurant-card .rating { color: #f0f6fc; font-size: 14px; margin-bottom: 6px; }
+.restaurant-card .location { color: #8b949e; font-size: 13px; margin-bottom: 4px; }
+.restaurant-card .categories { color: #9aa4af; font-size: 12px; margin-top: 4px; }
+.restaurant-card .hours { color: #9aa4af; font-size: 12px; margin-top: 4px; }
 </style>""", unsafe_allow_html=True)
 st.title("💬 RAG Chat — Odessa & Midland")
 
@@ -194,10 +200,10 @@ if not is_yelp_intent(q):
                 )
             else:
                 # General questions
-                general_system_prompt = """You are a helpful assistant for the Odessa & Midland area. 
-                You can help with general questions about the area, weather, local information, or anything else.
-                Be friendly, helpful, and conversational. If you don't know something specific about Odessa/Midland, 
-                say so but still try to be helpful."""
+                general_system_prompt = """You are a specialized restaurant and food analyst for Odessa & Midland, Texas. 
+                Your primary expertise is in restaurant recommendations, food analysis, and dining insights for this area.
+                While you can help with general questions, always steer conversations toward restaurant and food topics.
+                Be friendly, helpful, and conversational. If asked about non-food topics, politely redirect to restaurant recommendations."""
                 
                 result, err = complete_text(
                     [{"role":"system","content": general_system_prompt},
@@ -208,13 +214,13 @@ if not is_yelp_intent(q):
                 )
             
             if result:
-                txt = f"💡 **AI Response:** {result.strip()}\n\n_Note: I'm specialized in Odessa & Midland restaurant recommendations! Ask me about food, restaurants, ratings, or dining options in the area._"
+                txt = f"💡 **AI Response:** {result.strip()}"
             else:
-                txt = f"Happy to help — ask me Odessa/Midland food questions or anything else.\n\n_AI insights unavailable: {err}_"
+                txt = f"Hello! I'm your Odessa & Midland restaurant specialist. Ask me about food, restaurants, ratings, or dining options in the area!\n\n_AI insights unavailable: {err}_"
         except Exception as e:
-            txt = f"Happy to help — ask me Odessa/Midland food questions or anything else.\n\n_AI insights unavailable: {str(e)}_"
+            txt = f"Hello! I'm your Odessa & Midland restaurant specialist. Ask me about food, restaurants, ratings, or dining options in the area!\n\n_AI insights unavailable: {str(e)}_"
     else:
-        txt = "Happy to help — ask me Odessa/Midland food questions or anything else."
+        txt = "Hello! I'm your Odessa & Midland restaurant specialist. Ask me about food, restaurants, ratings, or dining options in the area!"
     
     st.markdown(f"<div class='bubble bubble-assist'>{txt}</div>", unsafe_allow_html=True)
     st.session_state.history.append(("assistant", txt))
@@ -327,12 +333,12 @@ if not df.empty:
             else:
                 categories = str(categories_raw)
             
-            # Clean up categories display
-            cat_display = ""
-            if categories and len(categories) < 60:
-                # Limit categories to first 2-3 items for readability
-                cat_list = categories.split(", ")[:2]
-                cat_display = f"<br><small style='color: #9aa4af;'>🍽️ {', '.join(cat_list)}</small>"
+                # Clean up categories display
+                cat_display = ""
+                if categories and len(categories) < 60:
+                    # Limit categories to first 2-3 items for readability
+                    cat_list = categories.split(", ")[:2]
+                    cat_display = f'<div class="categories">🍽️ {", ".join(cat_list)}</div>'
             
             # Handle hours display
             hours_raw = r.get("hours", "")
@@ -346,26 +352,22 @@ if not df.empty:
                     hours_preview = " | ".join(hours_lines[:2]) + " | ..."
                 else:
                     hours_preview = hours
-                hours_display = f"<br><small style='color: #9aa4af;'>🕒 {hours_preview}</small>"
+                hours_display = f'<div class="hours">🕒 {hours_preview}</div>'
             
-            # Create organized restaurant card
+            # Create organized restaurant card with CSS classes
             restaurant_card = f"""
-<div style="margin: 12px 0; padding: 12px; border: 1px solid #454c54; border-radius: 8px; background: #21262d;">
-    <div style="display: flex; justify-content: space-between; align-items: start;">
-        <div style="flex: 1;">
-            <h4 style="margin: 0 0 4px 0; color: #58a6ff;">
-                <a href="{url}" target="_blank" style="text-decoration: none; color: #58a6ff;">{i}. {name}</a>
-            </h4>
-            <div style="color: #f0f6fc; font-size: 14px; margin-bottom: 4px;">
-                ⭐ <strong>{rating:.1f}</strong> • {price} • {rc} reviews
-            </div>
-            <div style="color: #8b949e; font-size: 13px;">
-                📍 {city} • {addr}
-            </div>
-            {cat_display}
-            {hours_display}
-        </div>
+<div class="restaurant-card">
+    <h4>
+        <a href="{url}" target="_blank" style="text-decoration: none; color: #58a6ff;">{i}. {name}</a>
+    </h4>
+    <div class="rating">
+        ⭐ <strong>{rating:.1f}</strong> • {price} • {rc} reviews
     </div>
+    <div class="location">
+        📍 {city} • {addr}
+    </div>
+    {cat_display}
+    {hours_display}
 </div>"""
             out.append(restaurant_card)
         
@@ -395,19 +397,31 @@ st.markdown(answer, unsafe_allow_html=True)
 # Display AI insights separately if available
 if USE_LLM and enable_gpt and not df.empty:
     try:
-        # Build prompt for AI insights
+        # Build prompt for AI insights with current time
+        results = df.head(k).to_dict(orient="records")
         prompt = build_prompt(q, results)
+        
+        # Add current time information for open/closed queries
+        import datetime
+        now = datetime.datetime.now()
+        current_time = now.strftime("%H:%M")
+        current_day = now.strftime("%A")
+        
+        time_context = f"\n\nCurrent time context: Today is {current_day} and the current time is {current_time}."
+        prompt_with_time = prompt + time_context
+        
         enhanced_system_prompt = f"""{SYSTEM_PROMPT}
         
         Additional guidelines:
         - For hours queries: Provide the exact hours from the candidates data.
+        - For "open now" queries: Use the current day and time to determine if restaurants are currently open.
         - For "best" recommendations: Prioritize restaurants with 50+ reviews for reliability.
         - Be conversational and helpful, but concise.
         - Don't repeat information already visible in the restaurant cards."""
         
         result, err = complete_text(
             [{"role":"system","content": enhanced_system_prompt},
-             {"role":"user","content": prompt}],
+             {"role":"user","content": prompt_with_time}],
             model=os.getenv("OPENAI_MODEL","gpt-4o-mini"),
             temperature=0.3,
             max_tokens=500,
