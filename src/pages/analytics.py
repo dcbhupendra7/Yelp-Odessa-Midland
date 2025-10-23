@@ -41,9 +41,10 @@ with st.sidebar:
     st.header("Filters")
     sel_cities  = st.multiselect("City", ["Odessa", "Midland"], [])
     sel_prices  = st.multiselect("Price", ["$", "$$", "$$$", "$$$$", "None"], [])
-    min_stars   = st.slider("Min stars", 0.0, 5.0, 3.5, 0.5)
+    min_stars   = st.slider("Min stars", 0.0, 5.0, 0.0, 0.5)
     min_reviews = st.number_input("Min Yelp review count", value=0, min_value=0, step=10)
     st.caption("These filters apply to this page.")
+    st.info("💡 **Tip:** Set min stars to 3.5+ to focus on higher-rated restaurants only.")
 
 mask = (df_all["rating"] >= float(min_stars)) & (df_all["review_count"] >= int(min_reviews))
 if sel_prices:
