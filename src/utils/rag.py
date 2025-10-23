@@ -10,6 +10,7 @@ utils/rag.py
 from __future__ import annotations
 import os, re, json, pathlib
 from typing import Dict, List, Optional, Tuple
+from difflib import SequenceMatcher
 
 import pandas as pd
 
@@ -64,9 +65,78 @@ def _ensure_columns(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 def _norm(s: str) -> str:
-    s = (s or "").lower().replace("’","'").replace("`","'")
+    s = (s or "").lower().replace("'","'").replace("`","'")
     s = _WORD_STRIP.sub(" ", s)
     return re.sub(r"\s+"," ", s).strip()
+
+def fuzzy_match_score(query: str, target: str, threshold: float = 0.6) -> float:
+    """Calculate fuzzy match score between query and target string."""
+    query_norm = _norm(query)
+    target_norm = _norm(target)
+    
+    # Direct substring match gets highest score
+    if query_norm in target_norm:
+        return 1.0
+    
+    # Use SequenceMatcher for fuzzy matching
+    similarity = SequenceMatcher(None, query_norm, target_norm).ratio()
+    return similarity if similarity >= threshold else 0.0
+
+def find_fuzzy_matches(query: str, names: List[str], threshold: float = 0.6, max_results: int = 5) -> List[Tuple[str, float]]:
+    """Find fuzzy matches for a query against a list of names."""
+    matches = []
+    for name in names:
+        score = fuzzy_match_score(query, name, threshold)
+        if score > 0:
+            matches.append((name, score))
+    
+    # Sort by score descending
+    matches.sort(key=lambda x: x[1], reverse=True)
+    return matches[:max_results]
+
+def clean_missing_data(df: pd.DataFrame) -> pd.DataFrame:
+    """Clean up missing data by replacing 'nan' strings and empty values with user-friendly text."""
+    df = df.copy()
+    
+    # Define replacement mappings for different fields
+    replacements = {
+        'price': {
+            'nan': 'Call for Info',
+            '': 'Call for Info',
+            'None': 'Call for Info'
+        },
+        'address': {
+            'nan': 'Address Not Available',
+            '': 'Address Not Available'
+        },
+        'hours': {
+            'nan': 'Hours Not Available',
+            '': 'Hours Not Available',
+            'Hours not available': 'Hours Not Available'
+        },
+        'categories': {
+            'nan': 'Categories Not Available',
+            '': 'Categories Not Available'
+        },
+        'city': {
+            'nan': 'City Not Available',
+            '': 'City Not Available'
+        },
+        'name': {
+            'nan': 'Restaurant Name Not Available',
+            '': 'Restaurant Name Not Available'
+        }
+    }
+    
+    # Apply replacements
+    for column, replacement_map in replacements.items():
+        if column in df.columns:
+            # Replace string 'nan' values
+            df[column] = df[column].astype(str)
+            for old_val, new_val in replacement_map.items():
+                df[column] = df[column].replace(old_val, new_val)
+    
+    return df
 
 # ======================= Tabular Retriever =======================
 class Retriever:
@@ -111,6 +181,7 @@ class Retriever:
                 df[dst] = df[src]
 
         df = _ensure_columns(df)
+        df = clean_missing_data(df)  # Clean up missing data
         df["city_norm"] = df["city"].astype(str).str.lower()
         return df
 
@@ -195,7 +266,7 @@ class Retriever:
                     
                     # Try each variation
                     for variation in pattern_variations:
-                        # Look for restaurants that contain the variation as a substring
+                        # First try exact substring matches
                         exact_matches = self.docs[self.docs["name"].str.lower().str.contains(variation, case=False, na=False)]
                         
                         if not exact_matches.empty:
@@ -205,6 +276,20 @@ class Retriever:
                             ).sort_values(["_start_match", "rating", "review_count"], ascending=[False, False, False])
                             
                             return exact_matches.head(k)[REQUIRED_COLS].to_dict(orient="records")
+                        
+                        # If no exact matches, try fuzzy search
+                        restaurant_names = self.docs["name"].tolist()
+                        fuzzy_matches = find_fuzzy_matches(variation, restaurant_names, threshold=0.7, max_results=k)
+                        
+                        if fuzzy_matches:
+                            # Get the fuzzy matched restaurants
+                            matched_names = [match[0] for match in fuzzy_matches]
+                            fuzzy_results = self.docs[self.docs["name"].isin(matched_names)]
+                            
+                            if not fuzzy_results.empty:
+                                # Sort by fuzzy score (approximated by name order) and rating
+                                fuzzy_results = fuzzy_results.sort_values(["rating", "review_count"], ascending=[False, False])
+                                return fuzzy_results.head(k)[REQUIRED_COLS].to_dict(orient="records")
 
         # SECOND: Apply filters and do regular search
         min_stars = float(filters.get("min_stars", 0.0))
