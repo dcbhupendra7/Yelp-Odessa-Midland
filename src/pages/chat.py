@@ -47,22 +47,13 @@ st.markdown("""<style>
 </style>""", unsafe_allow_html=True)
 st.title("💬 RAG Chat — Odessa & Midland")
 
-# Controls Row
-col1, col2 = st.columns([1, 1])
+# Clear Chat Button
+if st.button("🗑️ Clear Chat", help="Clear all chat history"):
+    st.session_state.history = []
+    st.rerun()
 
-with col1:
-    # GPT Toggle
-    if USE_LLM:
-        enable_gpt = st.toggle("🤖 Enable AI Insights", value=True, help="Get enhanced responses with GPT-4o-mini")
-    else:
-        st.info("💡 Add OPENAI_API_KEY to your .env file to enable AI insights")
-        enable_gpt = False
-
-with col2:
-    # Clear Chat Button
-    if st.button("🗑️ Clear Chat", help="Clear all chat history"):
-        st.session_state.history = []
-        st.rerun()
+# Always enable GPT if available
+enable_gpt = USE_LLM
 
 SYSTEM_PROMPT = """You are an intelligent restaurant assistant specialized in Odessa & Midland.
 Use ONLY the supplied candidates and/or the numbered review context. If the answer isn't in the context, say so briefly.
@@ -316,20 +307,20 @@ if not df.empty:
             rating = float(r.get("rating",0.0))
             rc = int(r.get("review_count",0))
             
-            # Handle price properly - convert nan to N/A
+            # Handle price properly - use cleaned data from RAG system
             price_raw = r.get("price")
             if pd.isna(price_raw) or str(price_raw).lower() in ["nan", "none", ""] or str(price_raw).strip() == "":
-                price = "N/A"
+                price = "Call for Info"
             else:
                 price = str(price_raw)
             
             city = html.escape(str(r.get("city","")))
             addr = html.escape(str(r.get("address","")))
             
-            # Handle categories properly - convert nan to empty string
+            # Handle categories properly - use cleaned data from RAG system
             categories_raw = r.get("categories","")
             if pd.isna(categories_raw) or str(categories_raw).lower() == "nan" or str(categories_raw).strip() == "":
-                categories = ""
+                categories = "Categories Not Available"
             else:
                 categories = str(categories_raw)
             
@@ -340,7 +331,7 @@ if not df.empty:
                     cat_list = categories.split(", ")[:2]
                     cat_display = f'<div class="categories">🍽️ {", ".join(cat_list)}</div>'
             
-            # Handle hours display
+            # Handle hours display - use cleaned data from RAG system
             hours_raw = r.get("hours", "")
             if pd.isna(hours_raw) or str(hours_raw).lower() in ["nan", "none", "", "hours not available"] or str(hours_raw).strip() == "":
                 hours_display = ""
@@ -391,10 +382,7 @@ if kind == "average" and not df.empty:
 llm_block = ""
 # GPT integration moved to separate section below
 
-# Display restaurant list first
-st.markdown(answer, unsafe_allow_html=True)
-
-# Display AI insights separately if available
+# Display AI insights FIRST if available
 if USE_LLM and enable_gpt and not df.empty:
     try:
         # Build prompt for AI insights with current time
@@ -432,18 +420,23 @@ if USE_LLM and enable_gpt and not df.empty:
         else:
             ai_insights = f"💡 **AI Insights:** {result.strip()}"
             
-        # Display AI insights in a separate bubble
+        # Display AI insights in a separate bubble FIRST
         st.markdown(f"<div class='bubble bubble-assist'>{ai_insights}</div>", unsafe_allow_html=True)
-        
-        # Store both parts in history
-        final_response = answer + f"\n\n{ai_insights}"
-        st.session_state.history.append(("assistant", final_response))
         
     except Exception as e:
         ai_insights = f"💡 _Enhanced insights unavailable: {str(e)}_"
         st.markdown(f"<div class='bubble bubble-assist'>{ai_insights}</div>", unsafe_allow_html=True)
-        final_response = answer + f"\n\n{ai_insights}"
-        st.session_state.history.append(("assistant", final_response))
+
+# Display restaurant list AFTER AI insights
+st.markdown(answer, unsafe_allow_html=True)
+
+# Store both parts in history
+if USE_LLM and enable_gpt and not df.empty:
+    try:
+        final_response = ai_insights + f"\n\n{answer}"
+    except:
+        final_response = answer
+    st.session_state.history.append(("assistant", final_response))
 else:
     # No AI insights, just store the restaurant list
     st.session_state.history.append(("assistant", answer))
