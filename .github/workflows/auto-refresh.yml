@@ -1,0 +1,39 @@
+name: Automated Yelp Data Refresh
+
+on:
+  schedule:
+    # Run daily at 12 AM UTC (midnight)
+    - cron: '0 0 * * *'
+  workflow_dispatch: # Allow manual triggers
+
+jobs:
+  refresh-data:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.12'
+        
+    - name: Install dependencies
+      run: |
+        pip install -r requirements.txt
+        
+    - name: Run data refresh
+      env:
+        YELP_API_KEY: ${{ secrets.YELP_API_KEY }}
+        OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      run: |
+        python src/auto_refresh_data.py --mode incremental
+        
+    - name: Commit updated data
+      run: |
+        git config --local user.email "action@github.com"
+        git config --local user.name "GitHub Action"
+        git add data/processed/
+        git diff --staged --quiet || git commit -m "Auto-refresh: Update Yelp data [skip ci]"
+        git push

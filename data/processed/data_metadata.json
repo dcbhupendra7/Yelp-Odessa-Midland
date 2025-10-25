@@ -1,0 +1,16 @@
+{
+  "last_full_refresh": "2025-10-25T05:40:39.170566",
+  "last_incremental_update": "2025-10-25T05:39:21.701744",
+  "total_businesses": 1201,
+  "total_reviews": "31249",
+  "data_version": "1.1761388839",
+  "refresh_history": [
+    {
+      "timestamp": "2025-10-25T05:40:39.178282",
+      "type": "full_refresh",
+      "duration_minutes": 0.08289521666666667,
+      "businesses_count": 1201,
+      "reviews_count": "31249"
+    }
+  ]
+}
