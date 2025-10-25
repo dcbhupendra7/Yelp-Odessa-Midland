@@ -1,0 +1,70 @@
+category,businesses,mean_rating,median_rating,review_count_sum
+Mexican,46,3.643478260869565,3.7,1429
+Breakfast & Brunch,23,3.9478260869565216,3.9,652
+American,20,3.12,3.0,1661
+Burgers,18,3.538888888888889,3.6,746
+Barbeque,12,3.6833333333333336,3.55,510
+Sandwiches,12,3.0583333333333336,3.3,616
+Seafood,10,3.02,2.8,962
+Chinese,9,3.688888888888889,3.8,536
+Steakhouses,9,2.8444444444444446,2.7,875
+Pizza,8,3.4375,3.55,772
+Sports Bars,8,2.7125,2.75,546
+Food Trucks,7,3.7857142857142856,4.0,46
+New American,7,3.585714285714286,4.0,1386
+Salad,7,3.3285714285714287,3.1,569
+Bars,7,3.2285714285714286,3.1,491
+Coffee & Tea,5,4.18,4.4,109
+Cocktail Bars,5,3.7599999999999993,3.9,692
+Italian,5,3.56,3.7,498
+Tacos,5,3.54,3.9,159
+Cajun/Creole,4,3.3,3.2,246
+Fast Food,4,3.075,3.15,127
+Bakeries,3,4.166666666666667,4.2,150
+Noodles,3,4.133333333333333,4.1,138
+Asian Fusion,3,4.1000000000000005,4.1,362
+Vietnamese,3,4.033333333333333,4.1,149
+Soup,3,3.8333333333333335,4.5,129
+Delis,3,3.5666666666666664,3.9,89
+Comfort Food,3,3.233333333333334,2.7,360
+Tex-Mex,3,3.2000000000000006,3.2,252
+Sushi Bars,3,3.1333333333333333,2.8,92
+Beer Bar,3,3.033333333333333,2.8,46
+Chicken Wings,3,2.566666666666667,2.7,236
+Juice Bars & Smoothies,2,4.699999999999999,4.699999999999999,29
+Cafes,2,4.4,4.4,74
+Bubble Tea,2,4.15,4.15,112
+Meat Shops,2,4.15,4.15,148
+Hot Dogs,2,4.1,4.1,21
+Waffles,2,3.8,3.8,32
+Korean,2,3.75,3.75,31
+Cuban,2,3.7,3.7,15
+Chicken Shop,2,3.65,3.65,25
+Southern,2,3.4000000000000004,3.4000000000000004,212
+Buffets,2,3.4,3.4,55
+Japanese,2,3.3499999999999996,3.3499999999999996,334
+Ice Cream & Frozen Yogurt,2,2.85,2.85,38
+Caterers,1,5.0,5.0,2
+Patisserie/Cake Shop,1,5.0,5.0,1
+Salvadoran,1,5.0,5.0,1
+Soul Food,1,5.0,5.0,2
+Indian,1,4.4,4.4,126
+Donuts,1,4.3,4.3,4
+New Mexican Cuisine,1,4.3,4.3,11
+Specialty Food,1,4.3,4.3,12
+Latin American,1,4.2,4.2,15
+Wine Bars,1,4.1,4.1,600
+Ramen,1,4.0,4.0,123
+Street Vendors,1,4.0,4.0,3
+Grocery,1,3.9,3.9,24
+International Grocery,1,3.9,3.9,9
+Szechuan,1,3.8,3.8,16
+Tapas/Small Plates,1,3.7,3.7,50
+Diners,1,3.6,3.6,18
+Creperies,1,3.5,3.5,91
+Fish & Chips,1,3.4,3.4,101
+Smokehouse,1,3.1,3.1,56
+Tapas Bars,1,2.8,2.8,6
+Restaurants,1,2.7,2.7,42
+Pasta Shops,1,2.4,2.4,23
+Arcades,1,1.9,1.9,12
