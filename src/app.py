@@ -42,6 +42,5 @@ st.markdown(
     - **Analytics** — KPIs, charts, map, and CSV export  
     - **Chat** — RAG assistant grounded on your dataset (GPT-4o-mini)
     - **Investor Insights** — Strategic analysis for restaurant investment opportunities
-    - **Data Monitor** — Monitor and control automated data refresh
     """)
 st.markdown("<div class='footer'>© 2025 Bhupendra Dangi · Built with Yelp API, FAISS RAG, and GPT-4o-mini</div>", unsafe_allow_html=True)
