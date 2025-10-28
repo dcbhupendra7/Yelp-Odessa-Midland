@@ -227,50 +227,84 @@ if len(cluster_stats) > 0:
     st.markdown(f"**Strategic Insight:** Cluster {top_cluster} in {top_city} has a high average rating of {top_rating:.1f}★ but only {top_count:.0f} restaurants. This may be a target zone for expansion.")
 
 # Map visualization
-st.markdown("**Geographic Distribution by Cluster:**")
-st.markdown("*Restaurants are colored by cluster ID. Hover for details.*")
+st.markdown("**Interactive Map - Restaurants by Geographic Cluster:**")
 
-# Create map
-map_data = df_with_clusters[['latitude', 'longitude', 'cluster_id', 'name', 'rating', 'price']].copy()
+# Create color-coded map with better descriptions
+map_data = df_with_clusters[['latitude', 'longitude', 'cluster_id', 'name', 'rating', 'price', 'city']].copy()
 map_data['cluster_id'] = map_data['cluster_id'].astype(str)
 
-# Color mapping for clusters
+# Color mapping with descriptive labels
 def get_cluster_color(cluster_id):
     colors = {
-        '0': [255, 0, 0],      # Red
-        '1': [0, 255, 0],      # Green  
-        '2': [0, 0, 255],      # Blue
-        '3': [255, 255, 0]     # Yellow
+        '0': [255, 51, 51],     # Red - Cluster 0
+        '1': [0, 204, 102],      # Green - Cluster 1
+        '2': [0, 102, 255],      # Blue - Cluster 2
+        '3': [255, 204, 0]      # Yellow - Cluster 3
     }
     return colors.get(str(cluster_id), [128, 128, 128])
 
 map_data['color'] = map_data['cluster_id'].apply(get_cluster_color)
+
+# Add cluster label for tooltip
+def get_cluster_label(cluster_id):
+    labels = {
+        '0': '🟥 Cluster 0',
+        '1': '🟩 Cluster 1',
+        '2': '🟦 Cluster 2',
+        '3': '🟨 Cluster 3'
+    }
+    return labels.get(str(cluster_id), f'Cluster {cluster_id}')
+
+map_data['cluster_label'] = map_data['cluster_id'].apply(get_cluster_label)
 
 layer = pdk.Layer(
     'ScatterplotLayer',
     data=map_data,
     get_position='[longitude, latitude]',
     get_color='color',
-    get_radius=100,
+    get_radius=200,
     pickable=True,
+    opacity=0.7,
     tooltip={
-        'html': '<b>{name}</b><br/>Rating: {rating}★<br/>Price: {price}<br/>Cluster: {cluster_id}',
-        'style': {'backgroundColor': 'steelblue', 'color': 'white'}
+        'html': '<b>{name}</b><br/>📍 {city}<br/>⭐ Rating: {rating}<br/>💰 Price: {price}<br/>🎯 {cluster_label}',
+        'style': {
+            'backgroundColor': '#333333',
+            'color': 'white',
+            'fontSize': '14px',
+            'padding': '5px'
+        }
     }
 )
 
+# Calculate centered view
+center_lat = map_data['latitude'].mean()
+center_lng = map_data['longitude'].mean()
+
 view_state = pdk.ViewState(
-    latitude=map_data['latitude'].mean(),
-    longitude=map_data['longitude'].mean(),
-    zoom=10,
-    pitch=0
+    latitude=center_lat,
+    longitude=center_lng,
+    zoom=10.5,
+    pitch=45,
+    bearing=0
 )
 
 st.pydeck_chart(pdk.Deck(
-    map_style='mapbox://styles/mapbox/light-v9',
+    map_style='mapbox://styles/mapbox/light-v10',
     initial_view_state=view_state,
-    layers=[layer]
+    layers=[layer],
+    tooltip=True
 ))
+
+# Legend explanation
+st.markdown("""
+**📊 Map Legend:**
+- **🟥 Red dots** = Cluster 0 restaurants
+- **🟩 Green dots** = Cluster 1 restaurants  
+- **🟦 Blue dots** = Cluster 2 restaurants
+- **🟨 Yellow dots** = Cluster 3 restaurants
+
+*Hover over any dot to see restaurant name, location, and rating.*
+""")
 
 # Section 3: Competitor Benchmark
 st.header("⚔️ Competitor Benchmark")
