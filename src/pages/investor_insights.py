@@ -31,6 +31,24 @@ def load_businesses() -> pd.DataFrame:
     df = df.dropna(subset=['latitude', 'longitude', 'rating', 'review_count'])
     return df
 
+@st.cache_data(show_spinner=False)
+def load_all_businesses() -> pd.DataFrame:
+    """Load all restaurant data without city filtering (for competitor benchmark)."""
+    if CSV_RANKED.exists():
+        df = pd.read_csv(CSV_RANKED)
+    elif CSV_CLEAN.exists():
+        df = pd.read_csv(CSV_CLEAN)
+    else:
+        st.error("No business data found. Please run data processing first.")
+        st.stop()
+    
+    # Clean missing values but don't filter by city
+    df = df.dropna(subset=['rating', 'review_count'])
+    # Ensure city column exists
+    if 'city' not in df.columns:
+        df['city'] = ''
+    return df
+
 def clean_categories(categories_str):
     """Clean and split categories into a list of cuisine tags."""
     if pd.isna(categories_str):
@@ -121,19 +139,20 @@ def cluster_locations(df):
 
 def benchmark_competitors(df, cuisine, city):
     """
-    Analyze competition for a specific cuisine in a specific city.
+    Analyze competition for a specific cuisine in a specific city or all cities.
     Returns competitor metrics and strategic insights.
     """
-    # Filter data
-    df_filtered = df[df['city'].str.contains(city, case=False, na=False)]
-    
+    # df is already filtered by city if needed (passed from caller)
     # Find businesses that serve this cuisine
-    cuisine_businesses = df_filtered[
-        df_filtered['categories'].str.contains(cuisine, case=False, na=False)
+    cuisine_businesses = df[
+        df['categories'].str.contains(cuisine, case=False, na=False)
     ]
     
     if len(cuisine_businesses) == 0:
-        return None, f"No {cuisine} restaurants found in {city}."
+        if city == "all cities":
+            return None, f"No {cuisine} restaurants found in the dataset."
+        else:
+            return None, f"No {cuisine} restaurants found in {city}."
     
     # Calculate metrics
     avg_rating = cuisine_businesses['rating'].mean()
@@ -145,6 +164,13 @@ def benchmark_competitors(df, cuisine, city):
     price_counts = cuisine_businesses['price'].value_counts()
     most_common_price = price_counts.index[0] if len(price_counts) > 0 else "N/A"
     
+    # City breakdown for "All" option
+    city_breakdown = ""
+    if city == "all cities":
+        city_dist = cuisine_businesses['city'].value_counts().head(3)
+        if len(city_dist) > 0:
+            city_breakdown = f" Distribution: {', '.join([f'{city}: {count}' for city, count in city_dist.items()])}"
+    
     metrics = {
         'avg_rating': avg_rating,
         'median_rating': median_rating,
@@ -154,7 +180,10 @@ def benchmark_competitors(df, cuisine, city):
     }
     
     # Strategic insight
-    insight = f"If you open a new {cuisine} restaurant in {city}, you'll be competing mostly at the {most_common_price} price point. The average rating you need to beat to stand out is about {avg_rating:.1f}★, and the market currently only has {competitor_count} direct competitors."
+    if city == "all cities":
+        insight = f"Across all cities, there are {competitor_count} {cuisine} restaurants. The average rating you need to beat to stand out is about {avg_rating:.1f}★, and they typically charge {most_common_price}.{city_breakdown}"
+    else:
+        insight = f"If you open a new {cuisine} restaurant in {city}, you'll be competing mostly at the {most_common_price} price point. The average rating you need to beat to stand out is about {avg_rating:.1f}★, and the market currently has {competitor_count} direct competitors."
     
     return metrics, insight
 
@@ -317,12 +346,15 @@ st.markdown("""
 st.header("⚔️ Competitor Benchmark")
 st.markdown("**Understand the competitive landscape for specific cuisines and cities**")
 
+# Load all businesses (not filtered to Odessa/Midland only) for competitor benchmark
+df_all_cities = load_all_businesses()
+
 col1, col2 = st.columns(2)
 
 with col1:
-    # Get unique cuisines
+    # Get unique cuisines from all cities dataset
     all_categories = []
-    for categories in df['categories'].dropna():
+    for categories in df_all_cities['categories'].dropna():
         all_categories.extend(clean_categories(categories))
     
     unique_cuisines = sorted(list(set(all_categories)))
@@ -333,14 +365,27 @@ with col1:
     )
 
 with col2:
+    # Three options: Odessa, Midland, and All
+    city_options = ["Odessa", "Midland", "All"]
+    
     selected_city = st.selectbox(
         "Select city:",
-        ["Odessa", "Midland"],
-        help="Choose the target city"
+        city_options,
+        help="Choose the target city (select 'All' for combined analysis)",
+        index=0
     )
 
-# Compute competitor analysis
-metrics, insight = benchmark_competitors(df, selected_cuisine, selected_city)
+# Filter dataset based on city selection
+if selected_city == "All":
+    df_filtered = df_all_cities.copy()
+    analysis_city = "all cities"
+else:
+    # Filter to selected city
+    df_filtered = df_all_cities[df_all_cities['city'].str.contains(selected_city, case=False, na=False)]
+    analysis_city = selected_city
+
+# Compute competitor analysis using filtered dataset
+metrics, insight = benchmark_competitors(df_filtered, selected_cuisine, analysis_city)
 
 if metrics:
     st.markdown("**Competitive Analysis:**")
