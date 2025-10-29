@@ -12,13 +12,13 @@
         <meta name="author" content="Bhupendra Dangi">
       
       
-        <link rel="canonical" href="https://dcbhupendra7.github.io/yelp_odessa_sentiment/technical/setup/">
+        <link rel="canonical" href="https://dcbhupendra7.github.io/yelp_odessa_sentiment/technical/api/">
       
       
-        <link rel="prev" href="../api/">
+        <link rel="prev" href="../../results/business-impact/">
       
       
-        <link rel="next" href="../deployment/">
+        <link rel="next" href="../setup/">
       
       
       <link rel="icon" href="../../assets/images/favicon.png">
@@ -26,7 +26,7 @@
     
     
       
-        <title>Setup Guide - Yelp Odessa-Midland Restaurant Analytics Platform</title>
+        <title>API Documentation - Yelp Odessa-Midland Restaurant Analytics Platform</title>
       
     
     
@@ -78,7 +78,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#setup-guide" class="md-skip">
+        <a href="#technical-script-interfaces-apiscli" class="md-skip">
           Skip to content
         </a>
       
@@ -116,7 +116,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Setup Guide
+              API Documentation
             
           </span>
         </div>
@@ -351,7 +351,7 @@
     
     
       <li class="md-tabs__item md-tabs__item--active">
-        <a href="../api/" class="md-tabs__link">
+        <a href="./" class="md-tabs__link">
           
   
   
@@ -1054,29 +1054,6 @@
                 
   
   
-  
-  
-    <li class="md-nav__item">
-      <a href="../api/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    API Documentation
-    
-  </span>
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
     
   
   
@@ -1094,7 +1071,7 @@
   
   
   <span class="md-ellipsis">
-    Setup Guide
+    API Documentation
     
   </span>
   
@@ -1107,7 +1084,7 @@
   
   
   <span class="md-ellipsis">
-    Setup Guide
+    API Documentation
     
   </span>
   
@@ -1130,73 +1107,46 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#quick-start" class="md-nav__link">
+  <a href="#yelp_fetch_reviewspy" class="md-nav__link">
     <span class="md-ellipsis">
-      🚀 Quick Start
+      yelp_fetch_reviews.py
     </span>
   </a>
   
 </li>
       
         <li class="md-nav__item">
-  <a href="#prerequisites" class="md-nav__link">
+  <a href="#prepare_business_metricspy" class="md-nav__link">
     <span class="md-ellipsis">
-      Prerequisites
+      prepare_business_metrics.py
     </span>
   </a>
   
 </li>
       
         <li class="md-nav__item">
-  <a href="#installation" class="md-nav__link">
+  <a href="#build_rag_indexpy" class="md-nav__link">
     <span class="md-ellipsis">
-      Installation
+      build_rag_index.py
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="Installation">
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#auto_refresh_datapy" class="md-nav__link">
+    <span class="md-ellipsis">
+      auto_refresh_data.py
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="auto_refresh_data.py">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#1-clone-repository" class="md-nav__link">
+  <a href="#outputs" class="md-nav__link">
     <span class="md-ellipsis">
-      1. Clone Repository
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#2-install-dependencies" class="md-nav__link">
-    <span class="md-ellipsis">
-      2. Install Dependencies
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#3-set-up-environment-variables" class="md-nav__link">
-    <span class="md-ellipsis">
-      3. Set Up Environment Variables
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#4-run-data-pipeline" class="md-nav__link">
-    <span class="md-ellipsis">
-      4. Run Data Pipeline
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#5-launch-application" class="md-nav__link">
-    <span class="md-ellipsis">
-      5. Launch Application
+      Outputs
     </span>
   </a>
   
@@ -1208,60 +1158,18 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#alternative-automated-setup" class="md-nav__link">
+  <a href="#streamlit-app" class="md-nav__link">
     <span class="md-ellipsis">
-      Alternative: Automated Setup
+      Streamlit App
     </span>
   </a>
   
 </li>
       
         <li class="md-nav__item">
-  <a href="#troubleshooting" class="md-nav__link">
+  <a href="#environment-variables" class="md-nav__link">
     <span class="md-ellipsis">
-      Troubleshooting
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="Troubleshooting">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#missing-api-keys" class="md-nav__link">
-    <span class="md-ellipsis">
-      Missing API Keys
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#missing-data-files" class="md-nav__link">
-    <span class="md-ellipsis">
-      Missing Data Files
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#port-already-in-use" class="md-nav__link">
-    <span class="md-ellipsis">
-      Port Already in Use
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#verification" class="md-nav__link">
-    <span class="md-ellipsis">
-      Verification
+      Environment Variables
     </span>
   </a>
   
@@ -1271,6 +1179,29 @@
   
 </nav>
       
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../setup/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Setup Guide
+    
+  </span>
+  
+
+      </a>
     </li>
   
 
@@ -1477,73 +1408,46 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#quick-start" class="md-nav__link">
+  <a href="#yelp_fetch_reviewspy" class="md-nav__link">
     <span class="md-ellipsis">
-      🚀 Quick Start
+      yelp_fetch_reviews.py
     </span>
   </a>
   
 </li>
       
         <li class="md-nav__item">
-  <a href="#prerequisites" class="md-nav__link">
+  <a href="#prepare_business_metricspy" class="md-nav__link">
     <span class="md-ellipsis">
-      Prerequisites
+      prepare_business_metrics.py
     </span>
   </a>
   
 </li>
       
         <li class="md-nav__item">
-  <a href="#installation" class="md-nav__link">
+  <a href="#build_rag_indexpy" class="md-nav__link">
     <span class="md-ellipsis">
-      Installation
+      build_rag_index.py
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="Installation">
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#auto_refresh_datapy" class="md-nav__link">
+    <span class="md-ellipsis">
+      auto_refresh_data.py
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="auto_refresh_data.py">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#1-clone-repository" class="md-nav__link">
+  <a href="#outputs" class="md-nav__link">
     <span class="md-ellipsis">
-      1. Clone Repository
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#2-install-dependencies" class="md-nav__link">
-    <span class="md-ellipsis">
-      2. Install Dependencies
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#3-set-up-environment-variables" class="md-nav__link">
-    <span class="md-ellipsis">
-      3. Set Up Environment Variables
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#4-run-data-pipeline" class="md-nav__link">
-    <span class="md-ellipsis">
-      4. Run Data Pipeline
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#5-launch-application" class="md-nav__link">
-    <span class="md-ellipsis">
-      5. Launch Application
+      Outputs
     </span>
   </a>
   
@@ -1555,60 +1459,18 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#alternative-automated-setup" class="md-nav__link">
+  <a href="#streamlit-app" class="md-nav__link">
     <span class="md-ellipsis">
-      Alternative: Automated Setup
+      Streamlit App
     </span>
   </a>
   
 </li>
       
         <li class="md-nav__item">
-  <a href="#troubleshooting" class="md-nav__link">
+  <a href="#environment-variables" class="md-nav__link">
     <span class="md-ellipsis">
-      Troubleshooting
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="Troubleshooting">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#missing-api-keys" class="md-nav__link">
-    <span class="md-ellipsis">
-      Missing API Keys
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#missing-data-files" class="md-nav__link">
-    <span class="md-ellipsis">
-      Missing Data Files
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#port-already-in-use" class="md-nav__link">
-    <span class="md-ellipsis">
-      Port Already in Use
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#verification" class="md-nav__link">
-    <span class="md-ellipsis">
-      Verification
+      Environment Variables
     </span>
   </a>
   
@@ -1633,78 +1495,63 @@
   
 
 
-<h1 id="setup-guide">Setup Guide<a class="headerlink" href="#setup-guide" title="Permanent link">&para;</a></h1>
-<h2 id="quick-start">🚀 Quick Start<a class="headerlink" href="#quick-start" title="Permanent link">&para;</a></h2>
-<p>Get the platform running in minutes.</p>
-<hr />
-<h2 id="prerequisites">Prerequisites<a class="headerlink" href="#prerequisites" title="Permanent link">&para;</a></h2>
+<h1 id="technical-script-interfaces-apiscli">Technical: Script Interfaces (APIs/CLI)<a class="headerlink" href="#technical-script-interfaces-apiscli" title="Permanent link">&para;</a></h1>
+<h2 id="yelp_fetch_reviewspy">yelp_fetch_reviews.py<a class="headerlink" href="#yelp_fetch_reviewspy" title="Permanent link">&para;</a></h2>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>python<span class="w"> </span>src/yelp_fetch_reviews.py<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="w">  </span>--sleep<span class="w"> </span><span class="m">0</span>.25<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="w">  </span>--max_offset<span class="w"> </span><span class="m">1000</span><span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="w">  </span>--categories_file<span class="w"> </span>categories.txt<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="w">  </span>--cities<span class="w"> </span><span class="s2">&quot;Odessa, TX&quot;</span><span class="w"> </span><span class="s2">&quot;Midland, TX&quot;</span><span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="w">  </span>--save_every<span class="w"> </span><span class="m">200</span>
+</code></pre></div>
 <ul>
-<li><strong>Python 3.8+</strong> (3.12 recommended)</li>
-<li><strong>Yelp API Key</strong> (<a href="https://www.yelp.com/developers">Get one here</a>)</li>
-<li><strong>OpenAI API Key</strong> (optional, for enhanced chat features)</li>
+<li>Reads <code>YELP_API_KEY</code> from environment</li>
+<li>Outputs raw and clean CSVs as described in Deep Dive → Data Collection</li>
 </ul>
-<hr />
-<h2 id="installation">Installation<a class="headerlink" href="#installation" title="Permanent link">&para;</a></h2>
-<h3 id="1-clone-repository">1. Clone Repository<a class="headerlink" href="#1-clone-repository" title="Permanent link">&para;</a></h3>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>git<span class="w"> </span>clone<span class="w"> </span>https://github.com/yourusername/yelp_odessa_sentiment.git
-<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="nb">cd</span><span class="w"> </span>yelp_odessa_sentiment
+<h2 id="prepare_business_metricspy">prepare_business_metrics.py<a class="headerlink" href="#prepare_business_metricspy" title="Permanent link">&para;</a></h2>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>python<span class="w"> </span>src/prepare_business_metrics.py
 </code></pre></div>
-<h3 id="2-install-dependencies">2. Install Dependencies<a class="headerlink" href="#2-install-dependencies" title="Permanent link">&para;</a></h3>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>pip<span class="w"> </span>install<span class="w"> </span>-r<span class="w"> </span>requirements.txt
+<ul>
+<li>Input: <code>data/processed/businesses_clean.csv</code></li>
+<li>Output: <code>data/processed/businesses_ranked.csv</code></li>
+</ul>
+<h2 id="build_rag_indexpy">build_rag_index.py<a class="headerlink" href="#build_rag_indexpy" title="Permanent link">&para;</a></h2>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>python<span class="w"> </span>src/build_rag_index.py
 </code></pre></div>
-<h3 id="3-set-up-environment-variables">3. Set Up Environment Variables<a class="headerlink" href="#3-set-up-environment-variables" title="Permanent link">&para;</a></h3>
-<p>Create a <code>.env</code> file in the project root:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="c1"># Required for Yelp data fetching</span>
-<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="nv">YELP_API_KEY</span><span class="o">=</span>your_yelp_api_key_here
-<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>
-<a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a><span class="c1"># Optional for enhanced chat features</span>
-<a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a><span class="nv">OPENAI_API_KEY</span><span class="o">=</span>your_openai_api_key_here
-<a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a><span class="nv">OPENAI_MODEL</span><span class="o">=</span>gpt-4o-mini
-</code></pre></div>
-<h3 id="4-run-data-pipeline">4. Run Data Pipeline<a class="headerlink" href="#4-run-data-pipeline" title="Permanent link">&para;</a></h3>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="c1"># Step 1: Fetch Yelp data</span>
-<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>python<span class="w"> </span>src/yelp_fetch_reviews.py
+<ul>
+<li>Creates FAISS index + docstore under <code>data/processed/rag/</code></li>
+</ul>
+<h2 id="auto_refresh_datapy">auto_refresh_data.py<a class="headerlink" href="#auto_refresh_datapy" title="Permanent link">&para;</a></h2>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="c1"># Status report</span>
+<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>python<span class="w"> </span>src/auto_refresh_data.py<span class="w"> </span>--mode<span class="w"> </span>check
 <a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a>
-<a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a><span class="c1"># Step 2: Process and rank businesses</span>
-<a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a>python<span class="w"> </span>src/prepare_business_metrics.py
+<a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a><span class="c1"># Full refresh (with backup by default)</span>
+<a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a>python<span class="w"> </span>src/auto_refresh_data.py<span class="w"> </span>--mode<span class="w"> </span>full
 <a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a>
-<a id="__codelineno-3-7" name="__codelineno-3-7" href="#__codelineno-3-7"></a><span class="c1"># Step 3: Build RAG index</span>
-<a id="__codelineno-3-8" name="__codelineno-3-8" href="#__codelineno-3-8"></a>python<span class="w"> </span>src/build_rag_index.py
+<a id="__codelineno-3-7" name="__codelineno-3-7" href="#__codelineno-3-7"></a><span class="c1"># Incremental update (throttled to ≥6h)</span>
+<a id="__codelineno-3-8" name="__codelineno-3-8" href="#__codelineno-3-8"></a>python<span class="w"> </span>src/auto_refresh_data.py<span class="w"> </span>--mode<span class="w"> </span>incremental
+<a id="__codelineno-3-9" name="__codelineno-3-9" href="#__codelineno-3-9"></a>
+<a id="__codelineno-3-10" name="__codelineno-3-10" href="#__codelineno-3-10"></a><span class="c1"># Generate cron line</span>
+<a id="__codelineno-3-11" name="__codelineno-3-11" href="#__codelineno-3-11"></a>python<span class="w"> </span>src/auto_refresh_data.py<span class="w"> </span>--setup-cron
 </code></pre></div>
-<h3 id="5-launch-application">5. Launch Application<a class="headerlink" href="#5-launch-application" title="Permanent link">&para;</a></h3>
+<h3 id="outputs">Outputs<a class="headerlink" href="#outputs" title="Permanent link">&para;</a></h3>
+<ul>
+<li>Backups under <code>data/backups/&lt;timestamp&gt;/</code></li>
+<li><code>processed/data_metadata.json</code> with counts and history</li>
+</ul>
+<h2 id="streamlit-app">Streamlit App<a class="headerlink" href="#streamlit-app" title="Permanent link">&para;</a></h2>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>streamlit<span class="w"> </span>run<span class="w"> </span>src/app.py
 </code></pre></div>
-<p>Access at: <strong>http://localhost:8501</strong></p>
-<hr />
-<h2 id="alternative-automated-setup">Alternative: Automated Setup<a class="headerlink" href="#alternative-automated-setup" title="Permanent link">&para;</a></h2>
-<p>For GitHub Actions automation, see <a href="../deployment/">Deployment Guide</a>.</p>
-<hr />
-<h2 id="troubleshooting">Troubleshooting<a class="headerlink" href="#troubleshooting" title="Permanent link">&para;</a></h2>
-<h3 id="missing-api-keys">Missing API Keys<a class="headerlink" href="#missing-api-keys" title="Permanent link">&para;</a></h3>
-<p><strong>Error:</strong> <code>Missing YELP_API_KEY</code></p>
-<p><strong>Solution:</strong> 
-1. Check your <code>.env</code> file exists
-2. Verify API key is correct
-3. Make sure file is in project root</p>
-<h3 id="missing-data-files">Missing Data Files<a class="headerlink" href="#missing-data-files" title="Permanent link">&para;</a></h3>
-<p><strong>Error:</strong> <code>Missing processed CSV</code></p>
-<p><strong>Solution:</strong> Run the data pipeline (Step 4 above)</p>
-<h3 id="port-already-in-use">Port Already in Use<a class="headerlink" href="#port-already-in-use" title="Permanent link">&para;</a></h3>
-<p><strong>Error:</strong> <code>Port 8501 is already in use</code></p>
-<p><strong>Solution:</strong>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>streamlit<span class="w"> </span>run<span class="w"> </span>src/app.py<span class="w"> </span>--server.port<span class="w"> </span><span class="m">8502</span>
-</code></pre></div></p>
-<hr />
-<h2 id="verification">Verification<a class="headerlink" href="#verification" title="Permanent link">&para;</a></h2>
-<p>After setup, verify everything works:</p>
-<ol>
-<li>✅ Analytics page loads with data</li>
-<li>✅ Chat page responds to queries</li>
-<li>✅ Investor Insights shows opportunities</li>
-<li>✅ Maps display restaurant locations</li>
-</ol>
-<hr />
-<p>For detailed troubleshooting, see <a href="../api/">Technical Documentation</a>.</p>
+<ul>
+<li>Pages: Analytics, Chat, Investor Insights</li>
+</ul>
+<h2 id="environment-variables">Environment Variables<a class="headerlink" href="#environment-variables" title="Permanent link">&para;</a></h2>
+<ul>
+<li><code>YELP_API_KEY</code> (required)</li>
+<li><code>OPENAI_API_KEY</code> (optional for Chat)</li>
+<li>Optional overrides:</li>
+<li><code>DATA_DIR</code>, <code>RAG_DOC_TABLE</code>, <code>RAG_INDEX_PATH</code>, <code>RAG_DOCSTORE_PATH</code>, <code>EMBED_MODEL</code></li>
+</ul>
 
 
 
