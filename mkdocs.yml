@@ -93,6 +93,7 @@ nav:
       - API Documentation: technical/api.md
       - Setup Guide: technical/setup.md
       - Deployment: technical/deployment.md
+      - Glossary (Technical Terms): technical/glossary.md
   - Marketing & Use Cases:
       - For Investors: marketing/investors.md
       - For Restaurant Owners: marketing/restaurant-owners.md

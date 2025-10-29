@@ -162,6 +162,9 @@ def benchmark_competitors(df, cuisine, city):
 st.title("💰 Investor Insights: Odessa & Midland Only")
 st.markdown("**Strategic analysis for restaurant investment opportunities in Odessa & Midland only**")
 
+with st.sidebar:
+    st.markdown("[📚 Documentation](https://dcbhupendra7.github.io/Yelp-Odessa-Midland/)")
+
 # Load data
 df = load_businesses()
 
@@ -264,16 +267,7 @@ layer = pdk.Layer(
     get_color='color',
     get_radius=200,
     pickable=True,
-    opacity=0.7,
-    tooltip={
-        'html': '<b>{name}</b><br/>📍 {city}<br/>⭐ Rating: {rating}<br/>💰 Price: {price}<br/>🎯 {cluster_label}',
-        'style': {
-            'backgroundColor': '#333333',
-            'color': 'white',
-            'fontSize': '14px',
-            'padding': '5px'
-        }
-    }
+    opacity=0.8,
 )
 
 # Calculate centered view
@@ -284,16 +278,29 @@ view_state = pdk.ViewState(
     latitude=center_lat,
     longitude=center_lng,
     zoom=10.5,
-    pitch=45,
+    pitch=0,
     bearing=0
 )
 
-st.pydeck_chart(pdk.Deck(
-    map_style='mapbox://styles/mapbox/light-v10',
+# Prefer CARTO provider (no Mapbox token required). Tooltip at Deck level.
+deck = pdk.Deck(
+    map_provider='carto',
+    map_style='light',
     initial_view_state=view_state,
     layers=[layer],
-    tooltip=True
-))
+    tooltip={
+        'html': '<b>{name}</b><br/>📍 {city}<br/>⭐ Rating: {rating}<br/>💰 Price: {price}<br/>🎯 {cluster_label}',
+        'style': {
+            'backgroundColor': '#ffffff',
+            'color': '#000000',
+            'fontSize': '14px',
+            'padding': '6px',
+            'border': '1px solid #ccc'
+        }
+    }
+)
+
+st.pydeck_chart(deck)
 
 # Legend explanation
 st.markdown("""

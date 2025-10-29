@@ -143,10 +143,16 @@ class Retriever:
     """Simple keyword + rating ranker over the businesses table."""
     def __init__(self, table_path: Optional[pathlib.Path] = None) -> None:
         self.table_path = pathlib.Path(table_path) if table_path else (DOC_TABLE or DATA_DIR / "processed" / "rag" / "businesses_clean.csv")
+        self._doc_path = str(self.table_path)
+        self._doc_mtime: Optional[float] = None
         self.docs = self._load_table(self.table_path)
 
     def _load_table(self, p: pathlib.Path) -> pd.DataFrame:
         self._doc_path = str(p)
+        try:
+            self._doc_mtime = p.stat().st_mtime
+        except Exception:
+            self._doc_mtime = None
         if not p.exists():
             df = _ensure_columns(pd.DataFrame(columns=REQUIRED_COLS))
             df["__doc_path__"] = self._doc_path
@@ -185,7 +191,19 @@ class Retriever:
         df["city_norm"] = df["city"].astype(str).str.lower()
         return df
 
+    def _maybe_reload(self) -> None:
+        """Hot-reload the table if file timestamp changed (keeps data fresh)."""
+        try:
+            p = pathlib.Path(self._doc_path)
+            mtime = p.stat().st_mtime
+            if self._doc_mtime is None or mtime != self._doc_mtime:
+                self.docs = self._load_table(p)
+        except Exception:
+            # If stat fails for any reason, keep current docs
+            pass
+
     def search(self, query: str, k: int = 8, filters: Optional[Dict] = None) -> List[Dict]:
+        self._maybe_reload()
         filters = filters or {}
         df = self.docs
         if df.empty: return []
@@ -262,7 +280,7 @@ class Retriever:
                     elif 'burger king' in pattern:
                         pattern_variations.extend(['burgerking'])
                     elif 'chick fil a' in pattern or 'chik fil a' in pattern:
-                        pattern_variations.extend(['chick-fil-a', 'chik-fil-a', 'chickfila', 'chikfila'])
+                        pattern_variations.extend(['chick-fil-a', 'chik-fil-a', 'chick fila', 'chik fila'])
                     
                     # Try each variation
                     for variation in pattern_variations:
@@ -318,7 +336,7 @@ class Retriever:
                 'taco bell': ['taco bell'],
                 'burger king': ['burger king'],
                 'wendy': ['wendy\'s', 'wendys', 'wendy'],
-                'chick-fil-a': ['chick-fil-a', 'chik-fil-a', 'chick fil a', 'chik fil a'],
+                'chick-fil-a': ['chick-fil-a', 'chik-fil-a', 'chick fila', 'chik fila'],
                 'whataburger': ['whataburger'],
                 'jack in the box': ['jack in the box'],
                 'popeyes': ['popeyes', 'popeyes louisiana kitchen'],
@@ -375,12 +393,12 @@ class Retriever:
             # Enhanced category-based scoring for cuisine types
             category_score = pd.Series(0, index=df.index)
             cuisine_keywords = {
-                'indian': ['indian', 'curry', 'biryani', 'tandoori', 'indian restaurant', 'indian food'],
+                'indian': ['indian', 'curry', 'biryani', 'tandoori', 'indian restaurant', 'indian food', 'curry house'],
                 'chinese': ['chinese', 'dim sum', 'szechuan', 'cantonese', 'chinese restaurant', 'chinese food'],
-                'mexican': ['mexican', 'taco', 'burrito', 'enchilada', 'mexican restaurant', 'mexican food'],
+                'mexican': ['mexican', 'taco', 'burrito', 'enchilada', 'mexican restaurant', 'mexican food', 'tex-mex', 'texmex', 'taqueria'],
                 'italian': ['italian', 'pasta', 'pizza', 'trattoria', 'italian restaurant', 'italian food'],
-                'pizza': ['pizza', 'pizzeria', 'slice', 'pizza restaurant'],
-                'bbq': ['bbq', 'barbecue', 'smokehouse', 'bbq restaurant'],
+                'pizza': ['pizza', 'pizzeria', 'slice', 'pizza restaurant', 'pizza place'],
+                'bbq': ['bbq', 'barbecue', 'smokehouse', 'bbq restaurant', 'barbeque'],
                 'thai': ['thai', 'pad thai', 'tom yum', 'thai restaurant', 'thai food'],
                 'japanese': ['japanese', 'sushi', 'ramen', 'tempura', 'japanese restaurant', 'japanese food'],
                 'korean': ['korean', 'bibimbap', 'kimchi', 'korean restaurant', 'korean food'],
@@ -449,7 +467,7 @@ class Retriever:
                 # For specific restaurant queries, return only the exact matches
                 return exact_matches.head(k)[REQUIRED_COLS].to_dict(orient="records")
         
-        # If we have cuisine-specific results, prioritize them heavily
+        # If we have cuisine-specific results, prioritize them heavily (but still respect filters)
         if cuisine_match_found:
             # Find the detected cuisine type
             detected_cuisine = None
@@ -459,12 +477,30 @@ class Retriever:
                     break
             
             if detected_cuisine:
-                # For cuisine queries, do a direct category search on the entire database
-                cuisine_matches = self.docs[self.docs["categories"].str.lower().str.contains(detected_cuisine, case=False, na=False)]
+                # For cuisine queries, search the filtered dataframe (already has city/rating filters applied)
+                cuisine_matches = df[df["categories"].str.lower().str.contains(detected_cuisine, case=False, na=False)]
+                
+                # If no matches in filtered df, try searching before filters but still apply them
+                if len(cuisine_matches) == 0:
+                    # Search entire database for cuisine
+                    cuisine_matches_all = self.docs[self.docs["categories"].str.lower().str.contains(detected_cuisine, case=False, na=False)]
+                    # Now apply the same filters
+                    if filters:
+                        min_stars_filter = float(filters.get("min_stars", 0.0))
+                        cuisine_matches_all = cuisine_matches_all[cuisine_matches_all["rating"] >= min_stars_filter]
+                        if filters.get("city"):
+                            allow = {str(c).lower() for c in filters["city"]}
+                            cuisine_matches_all = cuisine_matches_all[cuisine_matches_all["city"].astype(str).str.lower().apply(lambda x: any(a in x for a in allow))]
+                        if filters.get("price"):
+                            cuisine_matches_all = cuisine_matches_all[cuisine_matches_all["price"].isin(filters["price"])]
+                    cuisine_matches = cuisine_matches_all
                 
                 if len(cuisine_matches) > 0:
-                    # Sort by rating and review count
-                    cuisine_matches = cuisine_matches.sort_values(["rating", "review_count"], ascending=[False, False])
+                    # Sort by score (if exists), then rating and review count
+                    if "_score" in cuisine_matches.columns:
+                        cuisine_matches = cuisine_matches.sort_values(["_score", "rating", "review_count"], ascending=[False, False, False])
+                    else:
+                        cuisine_matches = cuisine_matches.sort_values(["rating", "review_count"], ascending=[False, False])
                     return cuisine_matches.head(k)[REQUIRED_COLS].to_dict(orient="records")
         
         # If no cuisine-specific results, return regular search results
