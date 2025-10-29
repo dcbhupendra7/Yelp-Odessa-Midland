@@ -39,6 +39,7 @@ df_all = load_businesses()
 
 with st.sidebar:
     st.header("Filters")
+    st.markdown("[📚 Documentation](https://dcbhupendra7.github.io/Yelp-Odessa-Midland/)")
     sel_cities  = st.multiselect("City", ["Odessa", "Midland"], [])
     sel_prices  = st.multiselect("Price", ["$", "$$", "$$$", "$$$$", "None"], [])
     min_stars   = st.slider("Min stars", 0.0, 5.0, 0.0, 0.5)

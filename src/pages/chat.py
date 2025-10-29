@@ -47,6 +47,9 @@ st.markdown("""<style>
 </style>""", unsafe_allow_html=True)
 st.title("💬 RAG Chat — Odessa & Midland")
 
+with st.sidebar:
+    st.markdown("[📚 Documentation](https://dcbhupendra7.github.io/Yelp-Odessa-Midland/)")
+
 # Clear Chat Button
 if st.button("🗑️ Clear Chat", help="Clear all chat history"):
     st.session_state.history = []
@@ -118,6 +121,12 @@ AVG_WORDS={"avg","average","mean"}; FEW_REVIEWS={"few reviews","least reviews","
 LIMIT_RE=re.compile(r"\b(top|show|list)\s+(\d{1,2})\b", re.I)
 CITY_RE=re.compile(r"\b(odessa|midland)\b", re.I)
 STARS_RE=re.compile(r"(\d(?:\.\d)?)\s*\+?\s*stars?", re.I)
+# Enhanced rating patterns: "rating more than 3", "> 3", "above 3", "at least 3", etc.
+RATING_COMPARE_RE=re.compile(
+    r"(?:rating|stars?|rated)\s+(?:more\s+than|greater\s+than|above|over|higher\s+than|at\s+least|minimum|min|>|>=)\s*(\d(?:\.\d)?)", 
+    re.I
+)
+RATING_EXACT_RE=re.compile(r"(?:rating|stars?)\s*(?:of|is|are|:|>=?)\s*(\d(?:\.\d)?)", re.I)
 PRICE_RE=re.compile(r"\$|\$\$|\$\$\$|\$\$\$\$|price\s*[:=]?\s*(none|n/a)", re.I)
 
 def parse_limit(q, default_k): 
@@ -125,8 +134,20 @@ def parse_limit(q, default_k):
     return max(1,min(20,int(m.group(2)))) if m else default_k
 def parse_cities(q): return list({m.group(1).title() for m in CITY_RE.finditer(q)})
 def parse_min_stars(q, d): 
-    m=STARS_RE.search(q); 
-    return float(m.group(1)) if m else d
+    # Try comparative patterns first (e.g., "rating more than 3")
+    m = RATING_COMPARE_RE.search(q)
+    if m:
+        return float(m.group(1))
+    # Try exact patterns (e.g., "rating 3", "3 stars")
+    m = RATING_EXACT_RE.search(q) or STARS_RE.search(q)
+    if m:
+        return float(m.group(1))
+    # Try standalone numeric patterns with context words
+    rating_context = re.compile(r"\b(?:at\s+least|minimum|min|above|over|more\s+than|greater\s+than)\s+(\d(?:\.\d)?)\s*(?:stars?|rating)", re.I)
+    m = rating_context.search(q)
+    if m:
+        return float(m.group(1))
+    return d
 def parse_prices(q):
     out=[]; 
     for m in PRICE_RE.finditer(q):
@@ -227,6 +248,64 @@ kind = intent_kind(q)
 filters: Dict[str, object] = {"min_stars": min_stars}
 if cities: filters["city"] = cities
 if prices: filters["price"] = prices
+
+# Heuristic cuisine detection for direct DB filtering
+CUISINE_WORDS = [
+    'mexican','tex-mex','texmex','taqueria','italian','pizza','bbq','barbecue','thai','chinese','japanese','korean',
+    'vietnamese','indian','seafood','steak','burger','coffee','breakfast','brunch','dessert','bakery','sushi','ramen','noodles'
+]
+
+def detect_cuisine(query:str)->Optional[str]:
+    qn=_norm(query)
+    for w in CUISINE_WORDS:
+        if w in qn: return w
+    return None
+
+# Deterministic DB answer path for stats/list/existence
+def is_db_stats_query(q:str)->bool:
+    qn=_norm(q)
+    return any(x in qn for x in [
+        'how many','count','total','list all','show all','do you have','any restaurant','exists','exist','availability'
+    ])
+
+# Direct DataFrame filtering utility (never uses LLM)
+def filter_dataframe_for_query(df: pd.DataFrame, q: str, f: Dict[str, object]) -> pd.DataFrame:
+    out = df.copy()
+    out["rating"] = pd.to_numeric(out["rating"], errors="coerce").fillna(0.0)
+    out = out[out["rating"] >= float(f.get("min_stars", 0.0))]
+    if f.get("city"):
+        allow = {str(c).lower() for c in f["city"]}
+        out = out[out["city"].astype(str).str.lower().apply(lambda x: any(a in x for a in allow))]
+    if f.get("price"):
+        out = out[out["price"].isin(f["price"])]
+    cz = detect_cuisine(q)
+    if cz:
+        out = out[out["categories"].astype(str).str.lower().str.contains(cz, na=False)]
+    return out
+
+# If it's a database stats/list query, answer deterministically from the table
+if is_db_stats_query(q):
+    df_all = retriever.docs
+    df_ans = filter_dataframe_for_query(df_all, q, filters)
+    total = len(df_ans)
+    if total == 0:
+        txt = "No restaurants match those filters in the current dataset. Try adjusting city, cuisine, or rating."
+        st.markdown(f"<div class='bubble bubble-assist'>{txt}</div>", unsafe_allow_html=True)
+        st.session_state.history.append(("assistant", txt))
+        st.stop()
+    # Build concise deterministic answer
+    top = df_ans.sort_values(["rating","review_count"], ascending=[False,False]).head(min(5, total))
+    bullets = "\n".join([
+        f"• {r['name']} — ⭐{float(r['rating']):.1f} ({int(r['review_count'])} reviews) • {r['city']} • {r.get('price','N/A')}" 
+        for _, r in top.iterrows()
+    ])
+    txt = (
+        f"Found {total} restaurant(s) matching your filters.\n\n"
+        f"Top results:\n{bullets}"
+    )
+    st.markdown(f"<div class='bubble bubble-assist'>{txt.replace('\n','<br>')}</div>", unsafe_allow_html=True)
+    st.session_state.history.append(("assistant", txt))
+    st.stop()
 
 def safe_search(query, k, f):
     try: 
