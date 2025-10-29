@@ -6,9 +6,9 @@
 
 *Transforming restaurant data into actionable business intelligence*
 
-[Get Started](overview/what-we-built.md){ .md-button .md-button--primary }
-[View Demo](technology/architecture.md){ .md-button }
-[Technical Details](deep-dive/data-collection.md){ .md-button }
+[🎮 Try Interactive Demo](interactive-demo.md){ .md-button .md-button--primary }
+[Get Started](overview/what-we-built.md){ .md-button }
+[Technical Details](technology/architecture.md){ .md-button }
 
 </div>
 

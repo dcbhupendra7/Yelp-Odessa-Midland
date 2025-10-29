@@ -70,6 +70,7 @@ markdown_extensions:
 
 nav:
   - Home: index.md
+  - 🎮 Interactive Demo: interactive-demo.md
   - Overview:
       - What We Built: overview/what-we-built.md
       - Why We Stand Out: overview/why-stand-out.md
@@ -102,7 +103,7 @@ extra:
   social:
     - icon: fontawesome/brands/github
       link: https://github.com/dcbhupendra7
-    - icon: fontawesome/brands/bhupendra-dangi
+    - icon: fontawesome/brands/linkedin
       link: https://linkedin.com/in/bhupendra-dangi
   version:
     provider: mike
