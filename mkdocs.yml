@@ -1,0 +1,110 @@
+site_name: Yelp Odessa-Midland Restaurant Analytics Platform
+site_description: Advanced AI-Powered Restaurant Analytics & RAG-Based Intelligent Chat Assistant for Odessa & Midland, Texas
+site_author: Bhupendra Dangi
+# GitHub Pages URL will be automatically set
+# Format: https://YOUR_USERNAME.github.io/YOUR_REPO_NAME/
+site_url: https://dcbhupendra7.github.io/yelp_odessa_sentiment/
+
+repo_name: yelp_odessa_sentiment
+repo_url: https://github.com/dcbhupendra7/yelp_odessa_sentiment
+edit_uri: edit/main/docs/
+
+theme:
+  name: material
+  palette:
+    # Light mode
+    - scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    # Dark mode
+    - scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.expand
+    - navigation.top
+    - navigation.instant
+    - search.suggest
+    - search.highlight
+    - content.code.annotate
+    - content.code.copy
+    - content.tabs.link
+  icon:
+    repo: fontawesome/brands/github
+
+plugins:
+  - search
+  - git-revision-date-localized:
+      enable_creation_date: true
+
+markdown_extensions:
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - admonition
+  - pymdownx.details
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.emoji:
+      emoji_index: !!python/name:materialx.emoji.twemoji
+      emoji_generator: !!python/name:materialx.emoji.to_svg
+  - attr_list
+  - md_in_html
+  - toc:
+      permalink: true
+      toc_depth: 3
+
+nav:
+  - Home: index.md
+  - Overview:
+      - What We Built: overview/what-we-built.md
+      - Why We Stand Out: overview/why-stand-out.md
+      - Key Features: overview/key-features.md
+  - Technology & Innovation:
+      - System Architecture: technology/architecture.md
+      - RAG System: technology/rag-system.md
+      - Advanced Analytics: technology/analytics.md
+      - Automation: technology/automation.md
+  - Deep Dive:
+      - Data Collection: deep-dive/data-collection.md
+      - Data Processing: deep-dive/data-processing.md
+      - Investor Insights Analytics: deep-dive/investor-insights.md
+      - Search Algorithms: deep-dive/search-algorithms.md
+  - Results & Performance:
+      - Performance Metrics: results/performance.md
+      - Accuracy Improvements: results/accuracy.md
+      - Business Impact: results/business-impact.md
+  - Technical Documentation:
+      - API Documentation: technical/api.md
+      - Setup Guide: technical/setup.md
+      - Deployment: technical/deployment.md
+  - Marketing & Use Cases:
+      - For Investors: marketing/investors.md
+      - For Restaurant Owners: marketing/restaurant-owners.md
+      - For Developers: marketing/developers.md
+      - Competitive Advantages: marketing/advantages.md
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/dcbhupendra7
+    - icon: fontawesome/brands/bhupendra-dangi
+      link: https://linkedin.com/in/bhupendra-dangi
+  version:
+    provider: mike
+
+copyright: Copyright &copy; 2025 Bhupendra Dangi - University of Texas Permian Basin
