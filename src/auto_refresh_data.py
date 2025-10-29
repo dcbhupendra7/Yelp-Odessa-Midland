@@ -44,8 +44,16 @@ from yelp_fetch_reviews import main as fetch_yelp_data
 from prepare_business_metrics import main as prepare_metrics
 from build_rag_index import main as build_rag
 
-# Load environment variables
+# Load .env file if it exists (for local development)
+# In GitHub Actions, environment variables are set directly
 load_dotenv()
+
+# Verify required environment variables
+if not os.getenv("YELP_API_KEY"):
+    print("❌ Missing YELP_API_KEY in environment variables or .env file")
+    print("   For GitHub Actions: Set YELP_API_KEY as a GitHub Secret")
+    print("   For local use: Create .env file with YELP_API_KEY=your_key")
+    sys.exit(1)
 
 class YelpDataRefresher:
     def __init__(self, project_root: Path = None):

@@ -9,6 +9,8 @@ on:
 jobs:
   refresh-data:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write  # Required to push commits
     
     steps:
     - name: Checkout code
@@ -23,6 +25,17 @@ jobs:
       run: |
         pip install -r requirements.txt
         
+    - name: Verify API keys
+      run: |
+        if [ -z "$YELP_API_KEY" ]; then
+          echo "❌ YELP_API_KEY is not set"
+          exit 1
+        fi
+        echo "✅ YELP_API_KEY is set"
+      env:
+        YELP_API_KEY: ${{ secrets.YELP_API_KEY }}
+        OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        
     - name: Run data refresh
       env:
         YELP_API_KEY: ${{ secrets.YELP_API_KEY }}
@@ -31,9 +44,14 @@ jobs:
         python src/auto_refresh_data.py --mode incremental
         
     - name: Commit updated data
+      if: success()
       run: |
         git config --local user.email "action@github.com"
         git config --local user.name "GitHub Action"
-        git add data/processed/
-        git diff --staged --quiet || git commit -m "Auto-refresh: Update Yelp data [skip ci]"
-        git push
+        git add data/processed/ data/raw/ || true
+        if ! git diff --staged --quiet; then
+          git commit -m "Auto-refresh: Update Yelp data [skip ci]"
+          git push
+        else
+          echo "No changes to commit"
+        fi
