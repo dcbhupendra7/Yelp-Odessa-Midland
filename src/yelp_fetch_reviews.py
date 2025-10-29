@@ -30,6 +30,8 @@ from typing import List, Dict, Any
 from dotenv import load_dotenv
 from tqdm import tqdm
 
+# Load .env file if it exists (for local development)
+# In GitHub Actions, environment variables are set directly
 load_dotenv()
 
 # --------- Config (defaults) ----------
@@ -58,7 +60,7 @@ MANIFEST = CACHE_DIR / "manifest.json"  # tracks fetched pages
 # --------- API ----------
 API_KEY = os.getenv("YELP_API_KEY")
 if not API_KEY:
-    raise SystemExit("❌ Missing YELP_API_KEY in .env")
+    raise SystemExit("❌ Missing YELP_API_KEY. Set it as environment variable or in .env file")
 BASE_URL = "https://api.yelp.com/v3/businesses/search"
 HEADERS = {"Authorization": f"Bearer {API_KEY}"}
 
