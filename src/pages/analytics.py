@@ -130,7 +130,7 @@ if not map_df.empty:
                 data=map_df,
                 get_position="[longitude, latitude]",
                 get_radius=80,
-                get_fill_color="[32+_color*0.0, 136+_color*0.0, 255-_color*0.3]",
+                get_fill_color="[255-_color, _color, 0]",
                 pickable=True,
                 opacity=0.8,
             )
