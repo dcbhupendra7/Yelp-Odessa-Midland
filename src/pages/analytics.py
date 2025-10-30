@@ -110,6 +110,16 @@ else:
     st.info("No categories meet the threshold.")
 
 st.subheader("Map")
+with st.expander("📊 Map Legend ℹ️"):
+    st.markdown("""
+    **Color Coding by Rating:**
+    - **🔴 Red dots** = Lower ratings (≤ 3.0 stars)
+    - **🟡 Yellow dots** = Medium ratings (~ 4.0 stars)
+    - **🟢 Green dots** = Higher ratings (≥ 5.0 stars)
+    
+    *Colors transition smoothly from red (low) to green (high) based on Yelp star ratings.*
+    *Hover over any dot to see restaurant details.*
+    """)
 map_df = df[["name","rating","review_count","price","latitude","longitude","categories","address","city"]].dropna(subset=["latitude","longitude"])
 if not map_df.empty:
     color_by_rating = (map_df["rating"] - 3.0).clip(0, 2) / 2.0

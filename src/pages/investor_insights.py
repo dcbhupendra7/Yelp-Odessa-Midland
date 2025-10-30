@@ -331,15 +331,35 @@ deck = pdk.Deck(
 
 st.pydeck_chart(deck)
 
-# Legend explanation
+# Legend explanation with expandable info
+with st.expander("📊 Map Legend ℹ️"):
+    st.markdown("""
+    **What are Clusters?**
+    
+    Clusters represent **geographic hotspots** - areas where restaurants are grouped together based on their locations. 
+    Each cluster is a distinct geographic area identified using machine learning (KMeans clustering) based on 
+    latitude and longitude coordinates.
+    
+    **Color Coding:**
+    - **🟥 Red dots** = Cluster 0 restaurants (Geographic Hotspot 0)
+    - **🟩 Green dots** = Cluster 1 restaurants (Geographic Hotspot 1)
+    - **🟦 Blue dots** = Cluster 2 restaurants (Geographic Hotspot 2)
+    - **🟨 Yellow dots** = Cluster 3 restaurants (Geographic Hotspot 3)
+    
+    **Why This Matters:**
+    Clusters help identify location-based investment opportunities. Restaurants in the same cluster share 
+    similar geographic locations and may face similar market conditions. The cluster analysis table above 
+    shows performance metrics (average rating, review count, etc.) for each geographic area.
+    
+    *Hover over any dot on the map to see restaurant name, location, and rating.*
+    """)
+
 st.markdown("""
-**📊 Map Legend:**
+**📊 Quick Reference:**
 - **🟥 Red dots** = Cluster 0 restaurants
 - **🟩 Green dots** = Cluster 1 restaurants  
 - **🟦 Blue dots** = Cluster 2 restaurants
 - **🟨 Yellow dots** = Cluster 3 restaurants
-
-*Hover over any dot to see restaurant name, location, and rating.*
 """)
 
 # Section 3: Competitor Benchmark
