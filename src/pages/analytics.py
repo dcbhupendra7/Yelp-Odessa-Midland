@@ -110,31 +110,47 @@ else:
     st.info("No categories meet the threshold.")
 
 st.subheader("Map")
+with st.expander("📊 Map Legend ℹ️"):
+    st.markdown("""
+    **Color Coding by Rating:**
+    - **🔴 Red dots** = Lower ratings (≤ 3.0 stars)
+    - **🟡 Yellow dots** = Medium ratings (~ 4.0 stars)
+    - **🟢 Green dots** = Higher ratings (≥ 5.0 stars)
+    
+    *Colors transition smoothly from red (low) to green (high) based on Yelp star ratings.*
+    *Hover over any dot to see restaurant details.*
+    """)
 map_df = df[["name","rating","review_count","price","latitude","longitude","categories","address","city"]].dropna(subset=["latitude","longitude"])
 if not map_df.empty:
     color_by_rating = (map_df["rating"] - 3.0).clip(0, 2) / 2.0
     map_df = map_df.assign(_color=(color_by_rating * 255).astype(int))
-    st.pydeck_chart(
-        pdk.Deck(
-            map_style="mapbox://styles/mapbox/dark-v11",
-            initial_view_state=pdk.ViewState(
-                latitude=float(map_df["latitude"].mean()),
-                longitude=float(map_df["longitude"].mean()),
-                zoom=11
-            ),
-            layers=[
-                pdk.Layer(
-                    "ScatterplotLayer",
-                    data=map_df,
-                    get_position="[longitude, latitude]",
-                    get_radius=60,
-                    get_fill_color="[255, 160+_color, 80]",
-                    pickable=True,
-                )
-            ],
-            tooltip={"text": "{name} — {city}\n⭐ {rating} • {review_count} reviews • {price}\n{categories}"}
-        )
+    deck = pdk.Deck(
+        map_provider="carto",
+        map_style="light",
+        initial_view_state=pdk.ViewState(
+            latitude=float(map_df["latitude"].mean()),
+            longitude=float(map_df["longitude"].mean()),
+            zoom=11,
+            pitch=0,
+            bearing=0
+        ),
+        layers=[
+            pdk.Layer(
+                "ScatterplotLayer",
+                data=map_df,
+                get_position="[longitude, latitude]",
+                get_radius=80,
+                get_fill_color="[255-_color, _color, 0]",
+                pickable=True,
+                opacity=0.8,
+            )
+        ],
+        tooltip={
+            "html": "<b>{name}</b><br/>📍 {city}<br/>⭐ {rating} • {review_count} reviews • {price}<br/>{categories}",
+            "style": {"backgroundColor": "#ffffff", "color": "#000000", "fontSize": "13px", "padding": "6px", "border": "1px solid #ccc"}
+        }
     )
+    st.pydeck_chart(deck)
 else:
     st.info("No lat/long with current filters.")
 
