@@ -2010,50 +2010,69 @@
 <hr />
 <h2 id="architecture-diagram">📐 Architecture Diagram<a class="headerlink" href="#architecture-diagram" title="Permanent link">&para;</a></h2>
 <pre class="mermaid"><code>graph TB
-    Start([Start]) --&gt; YelpAPI[Yelp Fusion API]
+    %% Styling for better readability
+    classDef apiClass fill:#e8f4f8,stroke:#2c5aa0,stroke-width:2px,color:#000
+    classDef processClass fill:#fff4e6,stroke:#d97706,stroke-width:2px,color:#000
+    classDef dataClass fill:#f0fdf4,stroke:#16a34a,stroke-width:2px,color:#000
+    classDef ragClass fill:#fef3c7,stroke:#f59e0b,stroke-width:2px,color:#000
+    classDef appClass fill:#fce7f3,stroke:#c026d3,stroke-width:2px,color:#000
+    classDef decisionClass fill:#f3f4f6,stroke:#6b7280,stroke-width:3px,color:#000
+    classDef pageClass fill:#dbeafe,stroke:#2563eb,stroke-width:2px,color:#000
+    classDef featureClass fill:#e0e7ff,stroke:#6366f1,stroke-width:2px,color:#000
 
-    YelpAPI --&gt; Fetch[yelp_fetch_reviews.py&lt;br/&gt;Fetch Business Data]
-    Fetch --&gt; Cache[Cache JSON Pages&lt;br/&gt;data/cache/]
-    Cache --&gt; RawCSV[Raw CSV&lt;br/&gt;data/raw/businesses.csv]
+    Start([Start]):::apiClass --&gt; YelpAPI[Yelp Fusion API]:::apiClass
 
-    RawCSV --&gt; Process[prepare_business_metrics.py&lt;br/&gt;Calculate Rankings]
-    Process --&gt; Bayesian[Bayesian Weighted Rating&lt;br/&gt;Popularity Scoring]
-    Bayesian --&gt; RankedCSV[Ranked CSV&lt;br/&gt;data/processed/businesses_ranked.csv]
+    YelpAPI --&gt; Fetch[yelp_fetch_reviews.py&lt;br/&gt;Fetch Business Data]:::processClass
+    Fetch --&gt; Cache[Cache JSON Pages&lt;br/&gt;data/cache/]:::dataClass
+    Cache --&gt; RawCSV[Raw CSV&lt;br/&gt;data/raw/businesses.csv]:::dataClass
 
-    RankedCSV --&gt; BuildRAG[build_rag_index.py&lt;br/&gt;Build RAG Index]
-    BuildRAG --&gt; Embeddings[Sentence Transformers&lt;br/&gt;all-MiniLM-L6-v2]
-    Embeddings --&gt; FAISS[FAISS Vector Index&lt;br/&gt;data/processed/rag/]
+    RawCSV --&gt; Process[prepare_business_metrics.py&lt;br/&gt;Calculate Rankings]:::processClass
+    Process --&gt; Bayesian[Bayesian Weighted Rating&lt;br/&gt;Popularity Scoring]:::processClass
+    Bayesian --&gt; RankedCSV[Ranked CSV&lt;br/&gt;data/processed/businesses_ranked.csv]:::dataClass
 
-    FAISS --&gt; AutoRefresh{auto_refresh_data.py&lt;br/&gt;Data Refresh System}
-    AutoRefresh --&gt;|Manual| ManualRefresh[Full/Incremental Refresh]
-    AutoRefresh --&gt;|Scheduled| CronJob[Cron Job&lt;br/&gt;Daily at 2 AM]
-    AutoRefresh --&gt;|Check| StatusCheck[Data Freshness Check]
+    RankedCSV --&gt; BuildRAG[build_rag_index.py&lt;br/&gt;Build RAG Index]:::ragClass
+    BuildRAG --&gt; Embeddings[Sentence Transformers&lt;br/&gt;all-MiniLM-L6-v2]:::ragClass
+    Embeddings --&gt; FAISS[FAISS Vector Index&lt;br/&gt;data/processed/rag/]:::ragClass
 
-    RankedCSV --&gt; Streamlit[Streamlit App&lt;br/&gt;app.py]
+    FAISS --&gt; AutoRefresh{auto_refresh_data.py&lt;br/&gt;Data Refresh System}:::decisionClass
+    AutoRefresh --&gt;|Manual| ManualRefresh[Full/Incremental Refresh]:::processClass
+    AutoRefresh --&gt;|Scheduled| CronJob[Cron Job&lt;br/&gt;Daily at 2 AM]:::processClass
+    AutoRefresh --&gt;|Check| StatusCheck[Data Freshness Check]:::processClass
+
+    RankedCSV --&gt; Streamlit[Streamlit App&lt;br/&gt;app.py]:::appClass
     FAISS --&gt; Streamlit
 
-    Streamlit --&gt; Analytics[📊 Analytics Page]
-    Streamlit --&gt; Chat[💬 Chat Page]
-    Streamlit --&gt; Investor[💰 Investor Insights Page]
+    Streamlit --&gt; Analytics[📊 Analytics Page]:::pageClass
+    Streamlit --&gt; Chat[💬 Chat Page]:::pageClass
+    Streamlit --&gt; Investor[💰 Investor Insights Page]:::pageClass
 
-    Analytics --&gt; Filters[Filters:&lt;br/&gt;City, Price, Rating, Reviews]
-    Filters --&gt; Viz1[KPI Metrics]
-    Filters --&gt; Viz2[Ratings Distribution]
-    Filters --&gt; Viz3[Price Analysis]
-    Filters --&gt; Viz4[Category Analysis]
-    Filters --&gt; Viz5[Interactive Map]
-    Filters --&gt; Export[CSV Export]
+    Analytics --&gt; Filters[Filters:&lt;br/&gt;City, Price, Rating, Reviews]:::featureClass
+    Filters --&gt; Viz1[KPI Metrics]:::featureClass
+    Filters --&gt; Viz2[Ratings Distribution]:::featureClass
+    Filters --&gt; Viz3[Price Analysis]:::featureClass
+    Filters --&gt; Viz4[Category Analysis]:::featureClass
+    Filters --&gt; Viz5[Interactive Map]:::featureClass
+    Filters --&gt; Export[CSV Export]:::featureClass
 
-    Chat --&gt; RAGSystem[RAG Retrieval System]
-    RAGSystem --&gt; TabularRetrieval[Tabular Retrieval&lt;br/&gt;Ranked Candidates]
-    RAGSystem --&gt; VectorSearch[FAISS Vector Search&lt;br/&gt;Semantic Similarity]
-    VectorSearch --&gt; LLM[OpenAI GPT-4o-mini&lt;br/&gt;Optional]
-    LLM --&gt; ChatResponse[Context-Aware Responses&lt;br/&gt;with Citations]
+    Chat --&gt; RAGSystem[RAG Retrieval System]:::ragClass
+    RAGSystem --&gt; TabularRetrieval[Tabular Retrieval&lt;br/&gt;Ranked Candidates]:::ragClass
+    RAGSystem --&gt; VectorSearch[FAISS Vector Search&lt;br/&gt;Semantic Similarity]:::ragClass
+    VectorSearch --&gt; LLM[OpenAI GPT-4o-mini&lt;br/&gt;Optional]:::ragClass
+    LLM --&gt; ChatResponse[Context-Aware Responses&lt;br/&gt;with Citations]:::ragClass
 
-    Investor --&gt; MarketAnalysis[Market Opportunity Analysis]
-    Investor --&gt; LocationClustering[Geographic Clustering&lt;br/&gt;K-Means]
-    Investor --&gt; CategoryGaps[Category Gap Analysis]
-    Investor --&gt; InvestmentInsights[Investment Recommendations]</code></pre>
+    Investor --&gt; MarketAnalysis[Market Opportunity Analysis]:::featureClass
+    Investor --&gt; LocationClustering[Geographic Clustering&lt;br/&gt;K-Means]:::featureClass
+    Investor --&gt; CategoryGaps[Category Gap Analysis]:::featureClass
+    Investor --&gt; InvestmentInsights[Investment Recommendations]:::featureClass</code></pre>
+<p><strong>Color Coding:</strong>
+- 🔵 <strong>Blue</strong> = External APIs &amp; Data Sources
+- 🟠 <strong>Orange</strong> = Data Processing &amp; Scripts
+- 🟢 <strong>Green</strong> = Data Storage &amp; Files
+- 🟡 <strong>Yellow</strong> = RAG System &amp; AI Components
+- 🟣 <strong>Purple</strong> = Application Layer
+- ⚪ <strong>Gray</strong> = Decision Points
+- 🔷 <strong>Light Blue</strong> = Streamlit Pages
+- 💙 <strong>Indigo</strong> = Features &amp; Visualizations</p>
 <hr />
 <h2 id="data-flow">🔄 Data Flow<a class="headerlink" href="#data-flow" title="Permanent link">&para;</a></h2>
 <h3 id="1-data-collection-layer">1. Data Collection Layer<a class="headerlink" href="#1-data-collection-layer" title="Permanent link">&para;</a></h3>
@@ -2314,7 +2333,7 @@
     <span class="md-icon" title="Last update">
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M21 13.1c-.1 0-.3.1-.4.2l-1 1 2.1 2.1 1-1c.2-.2.2-.6 0-.8l-1.3-1.3c-.1-.1-.2-.2-.4-.2m-1.9 1.8-6.1 6V23h2.1l6.1-6.1zM12.5 7v5.2l4 2.4-1 1L11 13V7zM11 21.9c-5.1-.5-9-4.8-9-9.9C2 6.5 6.5 2 12 2c5.3 0 9.6 4.1 10 9.3-.3-.1-.6-.2-1-.2s-.7.1-1 .2C19.6 7.2 16.2 4 12 4c-4.4 0-8 3.6-8 8 0 4.1 3.1 7.5 7.1 7.9l-.1.2z"/></svg>
     </span>
-    <span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-date" title="October 29, 2025 22:12:05 UTC">October 29, 2025</span>
+    <span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-date" title="October 31, 2025 00:29:48 UTC">October 31, 2025</span>
   </span>
 
     
@@ -2324,7 +2343,7 @@
     <span class="md-icon" title="Created">
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M14.47 15.08 11 13V7h1.5v5.25l3.08 1.83c-.41.28-.79.62-1.11 1m-1.39 4.84c-.36.05-.71.08-1.08.08-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8c0 .37-.03.72-.08 1.08.69.1 1.33.32 1.92.64.1-.56.16-1.13.16-1.72 0-5.5-4.5-10-10-10S2 6.5 2 12s4.47 10 10 10c.59 0 1.16-.06 1.72-.16-.32-.59-.54-1.23-.64-1.92M18 15v3h-3v2h3v3h2v-3h3v-2h-3v-3z"/></svg>
     </span>
-    <span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-date" title="October 29, 2025 22:12:05 UTC">October 29, 2025</span>
+    <span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-date" title="October 31, 2025 00:29:48 UTC">October 31, 2025</span>
   </span>
 
     
