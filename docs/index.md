@@ -85,13 +85,19 @@ Market opportunity analysis, location hotspots, and competitor benchmarking
 
 ```mermaid
 graph LR
-    A[Yelp API] --> B[Data Collection]
-    B --> C[Processing]
-    C --> D[RAG Index]
-    D --> E[Streamlit App]
-    E --> F[Analytics]
-    E --> G[Chat]
-    E --> H[Investor Insights]
+    classDef apiClass fill:#e8f4f8,stroke:#2c5aa0,stroke-width:2px,color:#000
+    classDef processClass fill:#fff4e6,stroke:#d97706,stroke-width:2px,color:#000
+    classDef ragClass fill:#fef3c7,stroke:#f59e0b,stroke-width:2px,color:#000
+    classDef appClass fill:#fce7f3,stroke:#c026d3,stroke-width:2px,color:#000
+    classDef pageClass fill:#dbeafe,stroke:#2563eb,stroke-width:2px,color:#000
+    
+    A[Yelp API]:::apiClass --> B[Data Collection]:::processClass
+    B --> C[Processing]:::processClass
+    C --> D[RAG Index]:::ragClass
+    D --> E[Streamlit App]:::appClass
+    E --> F[Analytics]:::pageClass
+    E --> G[Chat]:::pageClass
+    E --> H[Investor Insights]:::pageClass
 ```
 
 **Five Layers:**

@@ -10,51 +10,71 @@ The Yelp Odessa-Midland Restaurant Analytics Platform follows a five-layer archi
 
 ```mermaid
 graph TB
-    Start([Start]) --> YelpAPI[Yelp Fusion API]
+    %% Styling for better readability
+    classDef apiClass fill:#e8f4f8,stroke:#2c5aa0,stroke-width:2px,color:#000
+    classDef processClass fill:#fff4e6,stroke:#d97706,stroke-width:2px,color:#000
+    classDef dataClass fill:#f0fdf4,stroke:#16a34a,stroke-width:2px,color:#000
+    classDef ragClass fill:#fef3c7,stroke:#f59e0b,stroke-width:2px,color:#000
+    classDef appClass fill:#fce7f3,stroke:#c026d3,stroke-width:2px,color:#000
+    classDef decisionClass fill:#f3f4f6,stroke:#6b7280,stroke-width:3px,color:#000
+    classDef pageClass fill:#dbeafe,stroke:#2563eb,stroke-width:2px,color:#000
+    classDef featureClass fill:#e0e7ff,stroke:#6366f1,stroke-width:2px,color:#000
     
-    YelpAPI --> Fetch[yelp_fetch_reviews.py<br/>Fetch Business Data]
-    Fetch --> Cache[Cache JSON Pages<br/>data/cache/]
-    Cache --> RawCSV[Raw CSV<br/>data/raw/businesses.csv]
+    Start([Start]):::apiClass --> YelpAPI[Yelp Fusion API]:::apiClass
     
-    RawCSV --> Process[prepare_business_metrics.py<br/>Calculate Rankings]
-    Process --> Bayesian[Bayesian Weighted Rating<br/>Popularity Scoring]
-    Bayesian --> RankedCSV[Ranked CSV<br/>data/processed/businesses_ranked.csv]
+    YelpAPI --> Fetch[yelp_fetch_reviews.py<br/>Fetch Business Data]:::processClass
+    Fetch --> Cache[Cache JSON Pages<br/>data/cache/]:::dataClass
+    Cache --> RawCSV[Raw CSV<br/>data/raw/businesses.csv]:::dataClass
     
-    RankedCSV --> BuildRAG[build_rag_index.py<br/>Build RAG Index]
-    BuildRAG --> Embeddings[Sentence Transformers<br/>all-MiniLM-L6-v2]
-    Embeddings --> FAISS[FAISS Vector Index<br/>data/processed/rag/]
+    RawCSV --> Process[prepare_business_metrics.py<br/>Calculate Rankings]:::processClass
+    Process --> Bayesian[Bayesian Weighted Rating<br/>Popularity Scoring]:::processClass
+    Bayesian --> RankedCSV[Ranked CSV<br/>data/processed/businesses_ranked.csv]:::dataClass
     
-    FAISS --> AutoRefresh{auto_refresh_data.py<br/>Data Refresh System}
-    AutoRefresh -->|Manual| ManualRefresh[Full/Incremental Refresh]
-    AutoRefresh -->|Scheduled| CronJob[Cron Job<br/>Daily at 2 AM]
-    AutoRefresh -->|Check| StatusCheck[Data Freshness Check]
+    RankedCSV --> BuildRAG[build_rag_index.py<br/>Build RAG Index]:::ragClass
+    BuildRAG --> Embeddings[Sentence Transformers<br/>all-MiniLM-L6-v2]:::ragClass
+    Embeddings --> FAISS[FAISS Vector Index<br/>data/processed/rag/]:::ragClass
     
-    RankedCSV --> Streamlit[Streamlit App<br/>app.py]
+    FAISS --> AutoRefresh{auto_refresh_data.py<br/>Data Refresh System}:::decisionClass
+    AutoRefresh -->|Manual| ManualRefresh[Full/Incremental Refresh]:::processClass
+    AutoRefresh -->|Scheduled| CronJob[Cron Job<br/>Daily at 2 AM]:::processClass
+    AutoRefresh -->|Check| StatusCheck[Data Freshness Check]:::processClass
+    
+    RankedCSV --> Streamlit[Streamlit App<br/>app.py]:::appClass
     FAISS --> Streamlit
     
-    Streamlit --> Analytics[📊 Analytics Page]
-    Streamlit --> Chat[💬 Chat Page]
-    Streamlit --> Investor[💰 Investor Insights Page]
+    Streamlit --> Analytics[📊 Analytics Page]:::pageClass
+    Streamlit --> Chat[💬 Chat Page]:::pageClass
+    Streamlit --> Investor[💰 Investor Insights Page]:::pageClass
     
-    Analytics --> Filters[Filters:<br/>City, Price, Rating, Reviews]
-    Filters --> Viz1[KPI Metrics]
-    Filters --> Viz2[Ratings Distribution]
-    Filters --> Viz3[Price Analysis]
-    Filters --> Viz4[Category Analysis]
-    Filters --> Viz5[Interactive Map]
-    Filters --> Export[CSV Export]
+    Analytics --> Filters[Filters:<br/>City, Price, Rating, Reviews]:::featureClass
+    Filters --> Viz1[KPI Metrics]:::featureClass
+    Filters --> Viz2[Ratings Distribution]:::featureClass
+    Filters --> Viz3[Price Analysis]:::featureClass
+    Filters --> Viz4[Category Analysis]:::featureClass
+    Filters --> Viz5[Interactive Map]:::featureClass
+    Filters --> Export[CSV Export]:::featureClass
     
-    Chat --> RAGSystem[RAG Retrieval System]
-    RAGSystem --> TabularRetrieval[Tabular Retrieval<br/>Ranked Candidates]
-    RAGSystem --> VectorSearch[FAISS Vector Search<br/>Semantic Similarity]
-    VectorSearch --> LLM[OpenAI GPT-4o-mini<br/>Optional]
-    LLM --> ChatResponse[Context-Aware Responses<br/>with Citations]
+    Chat --> RAGSystem[RAG Retrieval System]:::ragClass
+    RAGSystem --> TabularRetrieval[Tabular Retrieval<br/>Ranked Candidates]:::ragClass
+    RAGSystem --> VectorSearch[FAISS Vector Search<br/>Semantic Similarity]:::ragClass
+    VectorSearch --> LLM[OpenAI GPT-4o-mini<br/>Optional]:::ragClass
+    LLM --> ChatResponse[Context-Aware Responses<br/>with Citations]:::ragClass
     
-    Investor --> MarketAnalysis[Market Opportunity Analysis]
-    Investor --> LocationClustering[Geographic Clustering<br/>K-Means]
-    Investor --> CategoryGaps[Category Gap Analysis]
-    Investor --> InvestmentInsights[Investment Recommendations]
+    Investor --> MarketAnalysis[Market Opportunity Analysis]:::featureClass
+    Investor --> LocationClustering[Geographic Clustering<br/>K-Means]:::featureClass
+    Investor --> CategoryGaps[Category Gap Analysis]:::featureClass
+    Investor --> InvestmentInsights[Investment Recommendations]:::featureClass
 ```
+
+**Color Coding:**
+- 🔵 **Blue** = External APIs & Data Sources
+- 🟠 **Orange** = Data Processing & Scripts
+- 🟢 **Green** = Data Storage & Files
+- 🟡 **Yellow** = RAG System & AI Components
+- 🟣 **Purple** = Application Layer
+- ⚪ **Gray** = Decision Points
+- 🔷 **Light Blue** = Streamlit Pages
+- 💙 **Indigo** = Features & Visualizations
 
 ---
 
